@@ -1,0 +1,81 @@
+# ==================== PYTHON ====================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Distribución / empaquetado
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# ==================== ENTORNOS VIRTUALES ====================
+.venv/
+.venv-1/
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# ==================== IDE ====================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+*.sublime-project
+*.sublime-workspace
+
+# ==================== EDITOR ====================
+*.sublime-project
+*.sublime-workspace
+
+# ==================== LOGS Y CACHÉ ====================
+logs/
+*.log
+*.log.*
+
+# ==================== ARCHIVOS TEMPORALES ====================
+*.bak
+*.tmp
+*~
+.cache/
+interfaz_respaldo.py
+
+# ==================== ESPECÍFICO DEL PROYECTO ====================
+# Archivos de respaldo anteriores no necesarios
+*_respaldo.py
+*_old.py
+*_backup.py
+
+# ==================== OS ====================
+.DS_Store
+Thumbs.db
+*.lnk
+
+# ==================== PERMITIDOS ====================
+# ¡NO ignorar estos!
+!main.py
+!encriptador.py
+!core.py
+!interfaz.py
+!tests.py
+!README.md
+!GUIA_PRESENTACION.md
