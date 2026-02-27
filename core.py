@@ -1,49 +1,8 @@
-"""
-╔═══════════════════════════════════════════════════════════════════════╗
-║                    CORE DEL SISTEMA DE ENCRIPTACIÓN                  ║
-║                                                                       ║
-║  Módulo central que integra:                                         ║
-║  • Servicios (Autenticación, Encriptación)                           ║
-║  • Jerarquía de excepciones                                          ║
-║  • Configuración centralizada                                        ║
-║  • Sistema de logging para auditoría                                 ║
-╚═══════════════════════════════════════════════════════════════════════╝
-
-ARQUITECTURA:
-=============
-1. ServicioAutenticacion: Valida credenciales con límite de intentos
-2. ServicioEncriptacion: Gestiona encriptación, generación de claves y historial
-3. Configuración global: Credenciales por defecto, parámetros del sistema
-4. Logging: Registro de todas las operaciones para auditoría
-
-CASOS DE USO:
-=============
-- Usuario inicia sesión: autenticacion.autenticar(usuario, password)
-- Encriptar texto: encriptacion.encriptar(texto, enc_class)
-- Desencriptar: encriptacion.desencriptar()
-- Ver historial: encriptacion.obtener_historial()
-"""
-
 import logging
 import math
 from typing import Tuple, Optional, Dict, Any, List
 import numpy as np
 from numpy.typing import NDArray
-
-# ==================== CONFIGURACIÓN GLOBAL ====================
-
-# Credenciales por defecto para el sistema
-USUARIO_DEFECTO = "Mile"        # ✓ Usuario de prueba
-PASSWORD_DEFECTO = "1234"       # ✓ Contraseña de prueba
-
-# Parámetros de seguridad
-MAX_INTENTOS = 3                # Máximo de intentos fallidos antes de bloquear
-DTERMINANTE_MIN = 1e-6          # Precisión mínima para detectar singularidad
-
-# Parámetros de interfaz
-TAMAÑO_VENTANA = "900x800"      # Tamaño de ventana principal (ancho x alto)
-
-# ==================== JERARQUÍA DE EXCEPCIONES ====================
 
 class EncriptacionError(Exception):
     """Excepción base para errores de encriptación."""
