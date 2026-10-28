@@ -1,0 +1,1259 @@
+{
+  "name": "07 — Gestión: indicadores gerenciales, trazabilidad y conocimiento",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "soporte/gestion",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "name": "Webhook gestion",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        600
+      ],
+      "webhookId": "d66b4d84-e6ce-5533-8694-b3ca2c7e6904",
+      "id": "5e9df906-5889-558c-bdf3-60cab188b414"
+    },
+    {
+      "parameters": {
+        "jsCode": "const b = $json.body ?? $json;\nconst txt = (v, max) => String(v ?? '').trim().slice(0, max);\nconst entero = (v) => Number.parseInt(v, 10) || 0;\nconst fecha = (v) => /^\\d{4}-\\d{2}-\\d{2}$/.test(String(v ?? '')) ? String(v) : '';\nconst accion = txt(b.accion ?? b.action, 40).toLowerCase();\nconst session_token = txt(b.session_token, 200);\n\nconst FRONTEND_URL = 'http://localhost:3000'; // cámbialo cuando tengas dominio\nconst ACCIONES = ['dashboard', 'monitoreo', 'tickets_admin', 'trazabilidad', 'accesos', 'kb_listar', 'kb_guardar',\n                  'tecnicos_listar', 'tecnico_guardar', 'ausencia_guardar', 'ausencia_eliminar', 'zona_guardar'];\nconst ESTADOS = ['Pendiente', 'En diagnóstico', 'Resuelto IA', 'Escalamiento pendiente', 'Escalado nivel 2',\n                 'Pendiente de asignación', 'Agendado', 'En atención', 'Pendiente de confirmación', 'Cerrado', 'Cancelado'];\nconst PRIORIDADES = ['Crítica', 'Alta', 'Media', 'Baja'];\n\n// Periodo por defecto: últimos 30 días (hora Colombia); máximo un año\nconst hoy = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' }));\nconst iso = (f) => `${f.getFullYear()}-${String(f.getMonth() + 1).padStart(2, '0')}-${String(f.getDate()).padStart(2, '0')}`;\nconst hace30 = new Date(hoy); hace30.setDate(hoy.getDate() - 29);\nlet desde = fecha(b.desde) || iso(hace30);\nlet hasta = fecha(b.hasta) || iso(hoy);\nif (desde > hasta) [desde, hasta] = [hasta, desde];\nif ((new Date(hasta) - new Date(desde)) / 864e5 > 366) {\n  const d = new Date(hasta); d.setDate(d.getDate() - 366); desde = iso(d);\n}\n\nconst datos = {\n  accion, session_token, desde, hasta,\n  estado: ESTADOS.includes(b.estado) ? b.estado : '',\n  prioridad: PRIORIDADES.includes(b.prioridad) ? b.prioridad : '',\n  texto: txt(b.texto, 100),\n  solo_vencidos: b.solo_vencidos === true || b.solo_vencidos === 'true',\n  pagina: Math.max(1, entero(b.pagina)),\n  tamano: Math.min(100, Math.max(5, entero(b.tamano) || 25)),\n  ticket_id: entero(b.ticket_id),\n  correo: txt(b.correo, 254).toLowerCase(),\n  evento: txt(b.evento, 30),\n  kb_id: entero(b.id),\n  titulo: txt(b.titulo, 250),\n  categoria: txt(b.categoria, 80),\n  contenido: txt(b.contenido, 8000),\n  activo: !(b.activo === false || b.activo === 'false'),\n  creado_desde: fecha(b.creado_desde),\n  creado_hasta: fecha(b.creado_hasta),\n  // técnicos\n  tec_id: entero(b.tecnico_id),\n  nombre: txt(b.nombre, 150),\n  correo_tecnico: txt(b.correo_tecnico, 254).toLowerCase(),\n  telefono: txt(b.telefono, 30),\n  zona: txt(b.zona, 12),\n  hora_inicio: Number.parseInt(b.hora_inicio, 10),\n  hora_fin: Number.parseInt(b.hora_fin, 10),\n  dias: [...new Set((Array.isArray(b.dias) ? b.dias : []).map(Number))].filter((n) => n >= 1 && n <= 7).sort(),\n  // ausencias\n  ausencia_id: entero(b.ausencia_id),\n  aus_desde: fecha(b.aus_desde),\n  aus_hasta: fecha(b.aus_hasta),\n  motivo: txt(b.motivo, 200),\n  // zonas\n  zona_id: entero(b.zona_id),\n  palabras_clave: txt(b.palabras_clave, 2000),\n  frontend_url: FRONTEND_URL,\n};\n\nlet error = '', status = 'invalid';\nif (!ACCIONES.includes(accion)) error = 'Acción no válida.';\nelse if (!session_token) { error = 'Inicia sesión para continuar.'; status = 'unauthorized'; }\nelse if (accion === 'trazabilidad' && !datos.ticket_id && !datos.correo) error = 'Escribe un número de ticket o un correo.';\nelse if (accion === 'kb_guardar' && datos.titulo.length < 5) error = 'El título debe tener al menos 5 caracteres.';\nelse if (accion === 'kb_guardar' && datos.contenido.length < 20) error = 'El contenido debe tener al menos 20 caracteres.';\nelse if (accion === 'tecnico_guardar' && datos.nombre.length < 3) error = 'Escribe el nombre del técnico.';\nelse if (accion === 'tecnico_guardar' && !datos.tec_id && !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(datos.correo_tecnico)) error = 'Escribe un correo válido para el técnico.';\nelse if (accion === 'tecnico_guardar' && !datos.zona) error = 'Selecciona la zona de atención.';\nelse if (accion === 'tecnico_guardar' && !(datos.hora_inicio >= 0 && datos.hora_fin <= 24 && datos.hora_fin > datos.hora_inicio)) error = 'El horario no es válido: la hora final debe ser mayor que la inicial.';\nelse if (accion === 'tecnico_guardar' && !datos.dias.length) error = 'Selecciona al menos un día laboral.';\nelse if (accion === 'ausencia_guardar' && (!datos.tec_id || !datos.aus_desde || !datos.aus_hasta || datos.aus_hasta < datos.aus_desde)) error = 'Indica el técnico y un rango de fechas válido.';\nelse if (accion === 'ausencia_eliminar' && !datos.ausencia_id) error = 'Ausencia no válida.';\nelse if (accion === 'zona_guardar' && (datos.zona.length < 2 || datos.zona.length > 12)) error = 'El nombre de la zona debe tener entre 2 y 12 caracteres.';\n\nreturn [{ json: { ...datos, ruta: error ? 'invalido' : 'sesion', error, status } }];\n"
+      },
+      "name": "Validar petición de gestión",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        600
+      ],
+      "id": "2c6adac8-6420-5c3a-93ef-1e989923c3d0"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "ff10a4cb-2e61-5ae0-b46f-0a5625f62027",
+                    "leftValue": "={{ $json.ruta }}",
+                    "rightValue": "invalido",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "invalido"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "5da459ec-4564-5b14-8652-dec34ad4d765",
+                    "leftValue": "={{ $json.ruta }}",
+                    "rightValue": "sesion",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "sesion"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "¿Petición válida?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        440,
+        600
+      ],
+      "id": "d143d3a0-57b9-5e67-a08c-f8dd44b11f6c"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: false, status: $json.status, message: $json.error } }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "name": "Responder petición inválida",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        700,
+        400
+      ],
+      "id": "9810a83f-5717-521a-ac3a-e5dd80f42b70"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT u.id AS usuario_id, u.nombre_completo, u.correo, u.rol, te.id AS tecnico_id\n  FROM (SELECT 1) seed\n  LEFT JOIN public.sesiones_usuario s\n         ON s.token_hash = encode(digest($1::text, 'sha256'), 'hex') AND s.revocado_en IS NULL AND s.expira_en > now()\n  LEFT JOIN public.usuarios u ON u.id = s.usuario_id AND u.activo\n  LEFT JOIN public.tecnicos te ON te.usuario_id = u.id AND te.activo\n LIMIT 1;",
+        "options": {
+          "queryReplacement": "={{ [$json.session_token] }}"
+        }
+      },
+      "name": "Validar sesión y obtener rol",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        700,
+        600
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "9Gs2DA8EZ8914KDZ",
+          "name": "Postgres account"
+        }
+      },
+      "id": "41724537-750f-5c97-ac86-c8e8f984bceb"
+    },
+    {
+      "parameters": {
+        "jsCode": "const req = $('Validar petición de gestión').first().json;\nconst s = $input.first().json;\nconst permisos = {\"dashboard\": [\"admin\"], \"tickets_admin\": [\"admin\"], \"trazabilidad\": [\"admin\"], \"accesos\": [\"admin\"], \"kb_listar\": [\"admin\"], \"kb_guardar\": [\"admin\"], \"monitoreo\": [\"admin\"], \"tecnicos_listar\": [\"admin\"], \"tecnico_guardar\": [\"admin\"], \"ausencia_guardar\": [\"admin\"], \"ausencia_eliminar\": [\"admin\"], \"zona_guardar\": [\"admin\"]};\nlet ruta = req.accion, status = 'ok', message = '';\nif (!s.usuario_id) {\n  ruta = 'denegado'; status = 'unauthorized'; message = 'Tu sesión expiró o no es válida. Inicia sesión nuevamente.';\n} else if (!(permisos[req.accion] || []).includes(s.rol)) {\n  ruta = 'denegado'; status = 'forbidden'; message = 'Tu cuenta no tiene permiso para esta acción.';\n} else if (s.rol === 'tecnico' && !s.tecnico_id) {\n  ruta = 'denegado'; status = 'forbidden'; message = 'Tu usuario técnico no está activo en la tabla de técnicos.';\n}\nreturn [{ json: { ...req, ruta, status, message,\n  auth_usuario_id: Number(s.usuario_id || 0), auth_nombre: s.nombre_completo || '', auth_correo: s.correo || '',\n  auth_rol: s.rol || '', auth_tecnico_id: Number(s.tecnico_id || 0) } }];\n"
+      },
+      "name": "Autorizar acción según rol",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        940,
+        600
+      ],
+      "id": "cc37c46c-bf3c-5a78-a5e8-2fe9ebf04eb5"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "45916535-d07e-5d43-8340-f01696d5e5c6",
+                    "leftValue": "={{ $json.ruta }}",
+                    "rightValue": "denegado",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "denegado"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "f8c9715b-f03a-5bc5-9d90-45628c074af0",
+                    "leftValue": "={{ $json.ruta }}",
+                    "rightValue": "dashboard",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "dashboard"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "1c1ff31d-91e6-51cd-9752-a8837eee59b5",
+                    "leftValue": "={{ $json.ruta }}",
+                    "rightValue": "tickets_admin",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "tickets_admin"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "bcf8fb15-d908-557a-8f08-8c4087099264",
+                    "leftValue": "={{ $json.ruta }}",
+                    "rightValue": "trazabilidad",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "trazabilidad"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "e5a79fe8-9d5d-5287-ad21-a49a68156829",
+                    "leftValue": "={{ $json.ruta }}",
+                    "rightValue": "accesos",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "accesos"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "5317a6ed-0a9d-5259-8211-a2c050cb08b4",
+                    "leftValue": "={{ $json.ruta }}",
+                    "rightValue": "kb_listar",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "kb_listar"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "a9ed2564-d5a8-5028-b159-4feac68a19ad",
+                    "leftValue": "={{ $json.ruta }}",
+                    "rightValue": "kb_guardar",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "kb_guardar"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "722cf6f0-3cba-5510-a6f0-67d50ec9ff46",
+                    "leftValue": "={{ $json.ruta }}",
+                    "rightValue": "monitoreo",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "monitoreo"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "046916e5-1135-512b-9a72-b38cd19f3f60",
+                    "leftValue": "={{ $json.ruta }}",
+                    "rightValue": "tecnicos_listar",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "tecnicos_listar"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "c214cd13-49ad-54eb-957d-309726300334",
+                    "leftValue": "={{ $json.ruta }}",
+                    "rightValue": "tecnico_guardar",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "tecnico_guardar"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "e2fc361c-b4c1-5467-9edf-5b121902245c",
+                    "leftValue": "={{ $json.ruta }}",
+                    "rightValue": "ausencia_guardar",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "ausencia_guardar"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "4ab67f8a-9497-5676-9561-a4bb6b4ffadc",
+                    "leftValue": "={{ $json.ruta }}",
+                    "rightValue": "ausencia_eliminar",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "ausencia_eliminar"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "a99c05f2-326b-5c50-a713-2c7dcad72f4d",
+                    "leftValue": "={{ $json.ruta }}",
+                    "rightValue": "zona_guardar",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "zona_guardar"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Enrutar acción autorizada",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        1180,
+        600
+      ],
+      "id": "7cb9df8a-45a1-5324-8540-ce1e70e965ba"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: false, status: $json.status, message: $json.message } }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "name": "Responder acceso denegado",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1460,
+        300
+      ],
+      "id": "62cb199a-b406-5751-925a-509663ceb6cb"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ Object.assign({ success: true, status: 'ok' }, $json.data) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "name": "Responder datos",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1940,
+        800
+      ],
+      "id": "a7e12730-909d-5078-9916-3b6e1351ce0e"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH f AS (\n  SELECT * FROM public.tickets_soporte\n   WHERE fecha_creacion >= ($1::date)::timestamp AT TIME ZONE 'America/Bogota'\n     AND fecha_creacion <  ($2::date + 1)::timestamp AT TIME ZONE 'America/Bogota'\n), cerr AS (\n  SELECT * FROM f WHERE estado IN ('Cerrado', 'Resuelto IA') AND fecha_cierre IS NOT NULL\n), enc AS (\n  SELECT e.* FROM public.encuestas_satisfaccion e JOIN f ON f.id = e.ticket_id\n), vis AS (\n  SELECT r.* FROM public.resultados_visita r JOIN f ON f.id = r.ticket_id\n), primera AS (\n  SELECT DISTINCT ON (ticket_id) ticket_id, resultado FROM vis ORDER BY ticket_id, creado_en, id\n), dias AS (\n  SELECT d::date AS dia FROM generate_series($1::date, $2::date, interval '1 day') AS d\n), creados_dia AS (\n  SELECT (fecha_creacion AT TIME ZONE 'America/Bogota')::date AS dia, count(*) AS n FROM f GROUP BY 1\n), cerrados_dia AS (\n  SELECT (fecha_cierre AT TIME ZONE 'America/Bogota')::date AS dia, count(*) AS n\n    FROM public.tickets_soporte\n   WHERE estado IN ('Cerrado', 'Resuelto IA')\n     AND fecha_cierre >= ($1::date)::timestamp AT TIME ZONE 'America/Bogota'\n     AND fecha_cierre <  ($2::date + 1)::timestamp AT TIME ZONE 'America/Bogota'\n   GROUP BY 1\n)\nSELECT jsonb_build_object('metricas', jsonb_build_object(\n  'periodo', jsonb_build_object('desde', $1::text, 'hasta', $2::text),\n  'total_tickets',     (SELECT count(*) FROM f),\n  'abiertos',          (SELECT count(*) FROM f WHERE estado NOT IN ('Cerrado', 'Cancelado', 'Resuelto IA')),\n  'resueltos_ia',      (SELECT count(*) FROM f WHERE estado = 'Resuelto IA'),\n  'cerrados',          (SELECT count(*) FROM f WHERE estado = 'Cerrado'),\n  'cancelados',        (SELECT count(*) FROM f WHERE estado = 'Cancelado'),\n  'pendientes_confirmacion', (SELECT count(*) FROM f WHERE estado = 'Pendiente de confirmación'),\n  'tasa_resolucion_ia_pct', (SELECT round(100.0 * count(*) FILTER (WHERE estado = 'Resuelto IA')\n                                          / NULLIF(count(*), 0), 1) FROM cerr),\n  'tiempo_promedio_resolucion_horas', (SELECT round((avg(EXTRACT(EPOCH FROM (fecha_cierre - fecha_creacion))) / 3600)::numeric, 1) FROM cerr),\n  'cumplimiento_sla_pct', (SELECT round(100.0 * count(*) FILTER (WHERE fecha_cierre <= fecha_limite_atencion)\n                                        / NULLIF(count(*) FILTER (WHERE fecha_limite_atencion IS NOT NULL), 0), 1) FROM cerr),\n  'sla_vencidos_abiertos', (SELECT count(*) FROM public.tickets_soporte\n                             WHERE estado IN ('Pendiente', 'En diagnóstico', 'Escalamiento pendiente', 'Escalado nivel 2', 'Pendiente de asignación') AND fecha_limite_atencion < now()),\n  'satisfaccion_promedio', (SELECT round(avg(calificacion)::numeric, 2) FROM enc),\n  'encuestas_respondidas', (SELECT count(*) FROM enc),\n  'confirmacion_cliente_pct', (SELECT round(100.0 * count(*) FILTER (WHERE resuelto) / NULLIF(count(*), 0), 1) FROM enc),\n  'visitas_realizadas', (SELECT count(*) FROM vis),\n  'resolucion_primera_visita_pct', (SELECT round(100.0 * count(*) FILTER (WHERE resultado = 'Resuelto') / NULLIF(count(*), 0), 1) FROM primera),\n  'por_estado',    COALESCE((SELECT jsonb_object_agg(estado, n) FROM (SELECT estado, count(*) AS n FROM f GROUP BY 1) x), '{}'::jsonb),\n  'por_prioridad', COALESCE((SELECT jsonb_object_agg(p, n) FROM (SELECT COALESCE(prioridad, 'Sin prioridad') AS p, count(*) AS n FROM f GROUP BY 1) x), '{}'::jsonb),\n  'por_categoria', COALESCE((SELECT jsonb_object_agg(c, n) FROM (SELECT COALESCE(categoria, 'Sin clasificar') AS c, count(*) AS n FROM f GROUP BY 1) x), '{}'::jsonb),\n  'por_canal',     COALESCE((SELECT jsonb_object_agg(canal_origen, n) FROM (SELECT canal_origen, count(*) AS n FROM f GROUP BY 1) x), '{}'::jsonb),\n  'por_zona',      COALESCE((SELECT jsonb_object_agg(cuadrante, n) FROM (SELECT c.cuadrante, count(*) AS n FROM public.citas c JOIN f ON f.id = c.ticket_id GROUP BY 1) x), '{}'::jsonb),\n  'tendencia', (SELECT jsonb_agg(jsonb_build_object('dia', d.dia, 'creados', COALESCE(c.n, 0), 'cerrados', COALESCE(x.n, 0))\n                                 ORDER BY d.dia)\n                   FROM dias d LEFT JOIN creados_dia c ON c.dia = d.dia LEFT JOIN cerrados_dia x ON x.dia = d.dia),\n  'tecnicos', COALESCE((SELECT jsonb_agg(x ORDER BY x.visitas DESC, x.nombre) FROM (\n      SELECT te.id AS tecnico_id, te.nombre, te.cuadrante,\n             (SELECT count(*) FROM vis WHERE vis.tecnico_id = te.id) AS visitas,\n             (SELECT count(*) FROM vis WHERE vis.tecnico_id = te.id AND vis.resultado = 'Resuelto') AS resueltas,\n             (SELECT round(avg(e.calificacion)::numeric, 2) FROM enc e\n               WHERE e.tipo = 'tecnico' AND EXISTS (SELECT 1 FROM vis WHERE vis.ticket_id = e.ticket_id AND vis.tecnico_id = te.id)) AS satisfaccion,\n             (SELECT count(*) FROM public.citas c WHERE c.tecnico_id = te.id AND c.estado = 'Agendada' AND c.fecha_inicio > now()) AS proximas\n        FROM public.tecnicos te WHERE te.activo) x), '[]'::jsonb),\n  'actualizado_en', now()\n)) AS data;",
+        "options": {
+          "queryReplacement": "={{ [$json.desde, $json.hasta] }}"
+        }
+      },
+      "name": "Calcular indicadores gerenciales",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1460,
+        400
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "9Gs2DA8EZ8914KDZ",
+          "name": "Postgres account"
+        }
+      },
+      "id": "6474c883-5c74-5774-b92b-f1ce750312bc"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH base AS (\n  SELECT t.id AS ticket_id, t.nombre_completo, t.correo, t.telefono, t.direccion, t.tipo_dispositivo,\n         left(t.descripcion_problema, 200) AS descripcion, t.estado, t.categoria, t.nivel_impacto,\n         t.prioridad, t.puntaje_prioridad, t.motivo_prioridad, t.fecha_limite_atencion,\n         t.fecha_creacion, t.fecha_visita, t.fecha_cierre, t.canal_origen, (t.url_acta IS NOT NULL) AS tiene_acta,\n         te.nombre AS tecnico_nombre,\n         (t.fecha_limite_atencion < now() AND t.estado IN ('Pendiente', 'En diagnóstico', 'Escalamiento pendiente', 'Escalado nivel 2', 'Pendiente de asignación')) AS sla_vencido,\n         (t.estado IN ('Cerrado', 'Cancelado', 'Resuelto IA')) AS finalizado\n    FROM public.tickets_soporte t\n    LEFT JOIN public.tecnicos te ON te.id = t.tecnico_asignado_id\n   WHERE ($1 = '' OR t.estado = $1)\n     AND ($2 = '' OR t.prioridad = $2)\n     AND ($3 = '' OR t.id::text = $3 OR t.nombre_completo ILIKE '%' || $3 || '%' OR t.correo ILIKE '%' || $3 || '%')\n     AND t.fecha_creacion >= COALESCE((NULLIF($7, '')::date)::timestamp AT TIME ZONE 'America/Bogota', '-infinity')\n     AND t.fecha_creacion <  COALESCE((NULLIF($8, '')::date + 1)::timestamp AT TIME ZONE 'America/Bogota', 'infinity')\n), filtrado AS (\n  SELECT *, row_number() OVER (ORDER BY finalizado, puntaje_prioridad DESC NULLS LAST,\n                                        fecha_limite_atencion NULLS LAST, fecha_creacion DESC) AS orden\n    FROM base WHERE NOT $4 OR sla_vencido\n)\nSELECT jsonb_build_object(\n  'total', (SELECT count(*) FROM filtrado), 'pagina', $5::int, 'tamano', $6::int,\n  'tickets', COALESCE((SELECT jsonb_agg(to_jsonb(x) - 'orden' ORDER BY x.orden) FROM (\n      SELECT * FROM filtrado ORDER BY orden LIMIT $6 OFFSET ($5 - 1) * $6) x), '[]'::jsonb),\n  'tecnicos', COALESCE((SELECT jsonb_agg(jsonb_build_object('tecnico_id', te.id, 'nombre', te.nombre, 'cuadrante', te.cuadrante)\n                                         ORDER BY te.cuadrante, te.nombre)\n                          FROM public.tecnicos te WHERE te.activo), '[]'::jsonb)\n) AS data;",
+        "options": {
+          "queryReplacement": "={{ [$json.estado, $json.prioridad, $json.texto, $json.solo_vencidos, $json.pagina, $json.tamano, $json.creado_desde, $json.creado_hasta] }}"
+        }
+      },
+      "name": "Consultar tickets (paginado)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1460,
+        580
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "9Gs2DA8EZ8914KDZ",
+          "name": "Postgres account"
+        }
+      },
+      "id": "9553ce0f-87d7-5710-93fb-7419209ead3d"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT jsonb_build_object(\n  'tickets', CASE WHEN $2 <> '' THEN COALESCE((\n      SELECT jsonb_agg(jsonb_build_object('ticket_id', t.id, 'estado', t.estado, 'prioridad', t.prioridad,\n                                          'fecha_creacion', t.fecha_creacion, 'descripcion', left(t.descripcion_problema, 100))\n                       ORDER BY t.fecha_creacion DESC)\n        FROM public.tickets_soporte t WHERE lower(t.correo) = lower($2)), '[]'::jsonb) ELSE '[]'::jsonb END,\n  'ticket', (SELECT to_jsonb(x) FROM (\n      SELECT t.id AS ticket_id, t.nombre_completo, t.correo, t.telefono, t.direccion, t.estado, t.prioridad,\n             t.motivo_prioridad, t.categoria, t.canal_origen, t.fecha_creacion, t.fecha_limite_atencion,\n             t.fecha_visita, t.fecha_cierre, t.intentos_ia, t.acta_sha256, (t.url_acta IS NOT NULL) AS tiene_acta,\n             te.nombre AS tecnico_nombre\n        FROM public.tickets_soporte t LEFT JOIN public.tecnicos te ON te.id = t.tecnico_asignado_id\n       WHERE t.id = $1) x),\n  'eventos', COALESCE((SELECT jsonb_agg(to_jsonb(e) ORDER BY e.fecha, e.orden) FROM (\n      SELECT a.creado_en AS fecha, 1 AS orden, 'auditoria' AS tipo, a.actor::text AS actor, a.accion::text AS titulo,\n             a.estado_anterior::text AS estado_anterior, a.estado_nuevo::text AS estado_nuevo, a.detalle\n        FROM public.auditoria_tickets a WHERE a.ticket_id = $1\n      UNION ALL\n      SELECT h.fecha_mensaje, 2, 'chat', h.emisor::text, left(h.mensaje, 300), NULL, NULL, h.metadata\n        FROM public.historial_chat h WHERE h.ticket_id = $1\n      UNION ALL\n      SELECT c.creado_en, 3, 'cita', 'tecnico:' || c.tecnico_id,\n             'Cita ' || c.estado || ' para ' || to_char(c.fecha_inicio AT TIME ZONE 'America/Bogota', 'YYYY-MM-DD HH24:MI'),\n             NULL, NULL, jsonb_build_object('llegada', c.hora_llegada, 'salida', c.hora_salida, 'zona', c.cuadrante)\n        FROM public.citas c WHERE c.ticket_id = $1\n      UNION ALL\n      SELECT r.creado_en, 4, 'resultado', 'tecnico:' || r.tecnico_id, 'Resultado de visita: ' || r.resultado,\n             NULL, NULL, jsonb_build_object('diagnostico', r.diagnostico, 'trabajo', r.trabajo_realizado, 'repuestos', r.repuestos)\n        FROM public.resultados_visita r WHERE r.ticket_id = $1\n      UNION ALL\n      SELECT e.creado_en, 5, 'encuesta', 'cliente',\n             'Encuesta (' || e.tipo || '): ' || CASE WHEN e.resuelto THEN 'resuelto' ELSE 'no resuelto' END\n               || ', ' || COALESCE(e.calificacion::text, '-') || '/5',\n             NULL, NULL, jsonb_build_object('comentario', e.comentario)\n        FROM public.encuestas_satisfaccion e WHERE e.ticket_id = $1\n    ) e), '[]'::jsonb),\n  'accesos_cliente', COALESCE((SELECT jsonb_agg(to_jsonb(x) ORDER BY x.creado_en DESC) FROM (\n      SELECT ac.evento, ac.ip, ac.creado_en\n        FROM public.auditoria_accesos ac\n       WHERE lower(ac.correo) = (SELECT lower(t.correo) FROM public.tickets_soporte t WHERE t.id = $1)\n       ORDER BY ac.creado_en DESC LIMIT 20) x), '[]'::jsonb)\n) AS data;",
+        "options": {
+          "queryReplacement": "={{ [$json.ticket_id, $json.correo] }}"
+        }
+      },
+      "name": "Consultar trazabilidad del caso",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1460,
+        760
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "9Gs2DA8EZ8914KDZ",
+          "name": "Postgres account"
+        }
+      },
+      "id": "85b9629a-f1f7-567f-8170-4a33ccbc2f4c"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT jsonb_build_object('accesos', COALESCE((SELECT jsonb_agg(to_jsonb(x) ORDER BY x.creado_en DESC) FROM (\n  SELECT ac.creado_en, ac.correo, ac.evento, ac.ip, u.nombre_completo, u.rol\n    FROM public.auditoria_accesos ac\n    LEFT JOIN public.usuarios u ON u.id = ac.usuario_id\n   WHERE ($1 = '' OR lower(ac.correo) LIKE '%' || lower($1) || '%')\n     AND ($2 = '' OR ac.evento = $2)\n   ORDER BY ac.creado_en DESC LIMIT 200) x), '[]'::jsonb)) AS data;",
+        "options": {
+          "queryReplacement": "={{ [$json.correo, $json.evento] }}"
+        }
+      },
+      "name": "Consultar auditoría de accesos",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1460,
+        940
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "9Gs2DA8EZ8914KDZ",
+          "name": "Postgres account"
+        }
+      },
+      "id": "a09f0194-6d0a-51ed-bda2-60608c69b02e"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT jsonb_build_object('articulos', COALESCE((SELECT jsonb_agg(to_jsonb(x) ORDER BY x.activo DESC, x.categoria, x.titulo) FROM (\n  SELECT id, titulo, categoria, contenido, activo, creado_en FROM public.base_conocimiento) x), '[]'::jsonb)) AS data;",
+        "options": {
+          "queryReplacement": "={{ [] }}"
+        }
+      },
+      "name": "Listar base de conocimiento",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1460,
+        1120
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "9Gs2DA8EZ8914KDZ",
+          "name": "Postgres account"
+        }
+      },
+      "id": "be7a5051-7639-5342-9e4e-dafdafa33f78"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH ins AS (\n  INSERT INTO public.base_conocimiento (titulo, categoria, contenido, activo)\n  SELECT $2, NULLIF($3, ''), $4, $5 WHERE $1 = 0\n  RETURNING id\n), upd AS (\n  UPDATE public.base_conocimiento SET titulo = $2, categoria = NULLIF($3, ''), contenido = $4, activo = $5\n   WHERE id = $1 AND $1 <> 0\n  RETURNING id\n)\nSELECT COALESCE((SELECT id FROM ins), (SELECT id FROM upd)) AS id;",
+        "options": {
+          "queryReplacement": "={{ [$json.kb_id, $json.titulo, $json.categoria, $json.contenido, $json.activo] }}"
+        }
+      },
+      "name": "Guardar artículo de conocimiento",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1460,
+        1300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "9Gs2DA8EZ8914KDZ",
+          "name": "Postgres account"
+        }
+      },
+      "id": "6ca19637-8aa0-527a-b026-b8b2591caef8"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json.id ? { success: true, status: 'ok', id: Number($json.id), message: 'Artículo guardado.' } : { success: false, status: 'not_found', message: 'No se encontró el artículo.' } }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "name": "Responder artículo guardado",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1700,
+        1300
+      ],
+      "id": "28fed29a-66a7-5b48-aad0-1595053244ec"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH hoy AS (\n  SELECT (now() AT TIME ZONE 'America/Bogota')::date AS dia,\n         extract(isodow FROM (now() AT TIME ZONE 'America/Bogota'))::smallint AS dow\n)\nSELECT jsonb_build_object(\n  'nuevos_hoy',             (SELECT count(*) FROM public.tickets_soporte t, hoy WHERE (t.fecha_creacion AT TIME ZONE 'America/Bogota')::date = hoy.dia),\n  'abiertos',               (SELECT count(*) FROM public.tickets_soporte WHERE estado NOT IN ('Cerrado', 'Cancelado', 'Resuelto IA')),\n  'en_diagnostico_ia',      (SELECT count(*) FROM public.tickets_soporte WHERE estado IN ('Pendiente', 'En diagnóstico')),\n  'esperando_datos_visita', (SELECT count(*) FROM public.tickets_soporte WHERE estado = 'Escalamiento pendiente'),\n  'pendientes_asignacion',  (SELECT count(*) FROM public.tickets_soporte WHERE estado IN ('Pendiente de asignación', 'Escalado nivel 2')),\n  'en_atencion',            (SELECT count(*) FROM public.tickets_soporte WHERE estado = 'En atención'),\n  'esperando_confirmacion', (SELECT count(*) FROM public.tickets_soporte WHERE estado = 'Pendiente de confirmación'),\n  'visitas_hoy',            (SELECT count(*) FROM public.citas c, hoy WHERE c.estado IN ('Agendada', 'Realizada') AND (c.fecha_inicio AT TIME ZONE 'America/Bogota')::date = hoy.dia),\n  'visitas_hoy_realizadas', (SELECT count(*) FROM public.citas c, hoy WHERE c.estado = 'Realizada' AND (c.fecha_inicio AT TIME ZONE 'America/Bogota')::date = hoy.dia),\n  'sla_vencidos',           (SELECT count(*) FROM public.tickets_soporte WHERE estado IN ('Pendiente', 'En diagnóstico', 'Escalamiento pendiente', 'Escalado nivel 2', 'Pendiente de asignación') AND fecha_limite_atencion < now()),\n  'sla_por_vencer',         (SELECT count(*) FROM public.tickets_soporte WHERE estado IN ('Pendiente', 'En diagnóstico', 'Escalamiento pendiente', 'Escalado nivel 2', 'Pendiente de asignación')\n                               AND fecha_limite_atencion BETWEEN now() AND now() + interval '2 hours'),\n  'atencion_inmediata', COALESCE((SELECT jsonb_agg(to_jsonb(x) ORDER BY x.fecha_limite_atencion) FROM (\n      SELECT id AS ticket_id, nombre_completo, estado, prioridad, fecha_limite_atencion, (fecha_limite_atencion < now()) AS vencido\n        FROM public.tickets_soporte\n       WHERE estado IN ('Pendiente', 'En diagnóstico', 'Escalamiento pendiente', 'Escalado nivel 2', 'Pendiente de asignación') AND fecha_limite_atencion < now() + interval '2 hours'\n       ORDER BY fecha_limite_atencion LIMIT 10) x), '[]'::jsonb),\n  'tecnicos_hoy', COALESCE((SELECT jsonb_agg(to_jsonb(x) ORDER BY x.cuadrante, x.nombre) FROM (\n      SELECT te.id AS tecnico_id, te.nombre, te.cuadrante,\n             (hoy.dow = ANY (te.dias_laborales)) AS trabaja_hoy,\n             EXISTS (SELECT 1 FROM public.ausencias_tecnicos a WHERE a.tecnico_id = te.id AND hoy.dia BETWEEN a.desde AND a.hasta) AS ausente,\n             EXISTS (SELECT 1 FROM public.tickets_soporte t WHERE t.tecnico_asignado_id = te.id AND t.estado = 'En atención') AS en_atencion,\n             (SELECT count(*) FROM public.citas c WHERE c.tecnico_id = te.id AND c.estado IN ('Agendada', 'Realizada')\n                AND (c.fecha_inicio AT TIME ZONE 'America/Bogota')::date = hoy.dia) AS visitas_hoy,\n             (SELECT count(*) FROM public.citas c WHERE c.tecnico_id = te.id AND c.estado = 'Realizada'\n                AND (c.fecha_inicio AT TIME ZONE 'America/Bogota')::date = hoy.dia) AS realizadas_hoy,\n             (SELECT min(c.fecha_inicio) FROM public.citas c WHERE c.tecnico_id = te.id AND c.estado = 'Agendada' AND c.fecha_inicio > now()) AS proxima_visita\n        FROM public.tecnicos te, hoy WHERE te.activo) x), '[]'::jsonb),\n  'actividad_reciente', COALESCE((SELECT jsonb_agg(to_jsonb(x) ORDER BY x.fecha DESC) FROM (\n      SELECT a.creado_en AS fecha, a.ticket_id, a.accion, a.actor, a.estado_nuevo\n        FROM public.auditoria_tickets a ORDER BY a.creado_en DESC, a.id DESC LIMIT 12) x), '[]'::jsonb),\n  'actualizado_en', now()\n) AS data\nFROM hoy;",
+        "options": {
+          "queryReplacement": "={{ [] }}"
+        }
+      },
+      "name": "Consultar monitoreo operativo",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1460,
+        1480
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "9Gs2DA8EZ8914KDZ",
+          "name": "Postgres account"
+        }
+      },
+      "id": "c4186815-d1d6-59c0-bca6-1c34ee9e34a0"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT jsonb_build_object(\n  'tecnicos', COALESCE((SELECT jsonb_agg(to_jsonb(x) ORDER BY x.activo DESC, x.cuadrante, x.nombre) FROM (\n      SELECT te.id AS tecnico_id, te.nombre, te.correo, te.telefono, te.cuadrante, te.activo,\n             te.hora_inicio, te.hora_fin, te.dias_laborales, u.id AS usuario_id,\n             (u.password_hash IS NOT NULL) AS cuenta_activa,\n             (SELECT count(*) FROM public.citas c WHERE c.tecnico_id = te.id AND c.estado = 'Agendada' AND c.fecha_inicio > now()) AS citas_proximas,\n             (SELECT count(*) FROM public.citas c WHERE c.tecnico_id = te.id AND c.estado = 'Realizada') AS visitas_realizadas,\n             COALESCE((SELECT jsonb_agg(jsonb_build_object('id', a.id, 'desde', a.desde, 'hasta', a.hasta, 'motivo', a.motivo) ORDER BY a.desde)\n                         FROM public.ausencias_tecnicos a\n                        WHERE a.tecnico_id = te.id AND a.hasta >= (now() AT TIME ZONE 'America/Bogota')::date), '[]'::jsonb) AS ausencias\n        FROM public.tecnicos te LEFT JOIN public.usuarios u ON u.id = te.usuario_id) x), '[]'::jsonb),\n  'zonas', COALESCE((SELECT jsonb_agg(to_jsonb(x) ORDER BY x.nombre) FROM (\n      SELECT z.id AS zona_id, z.nombre, z.palabras_clave, z.activo,\n             (SELECT count(*) FROM public.tecnicos te WHERE te.cuadrante = z.nombre AND te.activo) AS tecnicos_activos\n        FROM public.zonas z) x), '[]'::jsonb)\n) AS data;",
+        "options": {
+          "queryReplacement": "={{ [] }}"
+        }
+      },
+      "name": "Listar técnicos y zonas",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1460,
+        1660
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "9Gs2DA8EZ8914KDZ",
+          "name": "Postgres account"
+        }
+      },
+      "id": "254f336e-b085-56b5-a2cd-f3abee8679dd"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH zona AS (\n  SELECT nombre FROM public.zonas WHERE nombre = $5\n), usr AS (\n  -- técnico nuevo: se usa la cuenta existente con ese correo o se crea una sin contraseña\n  INSERT INTO public.usuarios (nombre_completo, correo, telefono, rol, activo)\n  SELECT $2, lower($3), NULLIF($4, ''), 'tecnico', true WHERE $1 = 0 AND EXISTS (SELECT 1 FROM zona)\n  ON CONFLICT ((lower(correo))) DO UPDATE\n     SET rol = CASE WHEN public.usuarios.rol = 'admin' THEN 'admin' ELSE 'tecnico' END\n  RETURNING id, (password_hash IS NULL) AS sin_clave\n), ins_te AS (\n  INSERT INTO public.tecnicos (usuario_id, nombre, correo, telefono, cuadrante, hora_inicio, hora_fin, dias_laborales, activo)\n  SELECT usr.id, $2, lower($3), NULLIF($4, ''), $5, $6, $7, $8::smallint[], $9 FROM usr\n  ON CONFLICT DO NOTHING\n  RETURNING id\n), upd_te AS (\n  UPDATE public.tecnicos te\n     SET nombre = $2, telefono = NULLIF($4, ''), cuadrante = $5, hora_inicio = $6, hora_fin = $7,\n         dias_laborales = $8::smallint[], activo = $9\n   WHERE te.id = $1 AND $1 <> 0 AND EXISTS (SELECT 1 FROM zona)\n  RETURNING id, usuario_id\n), upd_usr AS (\n  UPDATE public.usuarios u SET nombre_completo = $2, telefono = COALESCE(NULLIF($4, ''), u.telefono)\n    FROM upd_te WHERE u.id = upd_te.usuario_id\n), tok AS (\n  SELECT encode(gen_random_bytes(32), 'hex') AS token\n), invitacion AS (\n  -- cuenta sin contraseña: enlace de 72 h para que el técnico la defina\n  INSERT INTO public.tokens_recuperacion (usuario_id, token_hash, expira_en)\n  SELECT usr.id, encode(digest(tok.token, 'sha256'), 'hex'), now() + interval '72 hours'\n    FROM usr, tok WHERE usr.sin_clave AND EXISTS (SELECT 1 FROM ins_te)\n  RETURNING id\n)\nSELECT COALESCE((SELECT id FROM ins_te), (SELECT id FROM upd_te)) AS tecnico_id,\n       EXISTS (SELECT 1 FROM zona) AS zona_ok,\n       ($1 = 0 AND EXISTS (SELECT 1 FROM usr) AND NOT EXISTS (SELECT 1 FROM ins_te)) AS ya_existia,\n       CASE WHEN EXISTS (SELECT 1 FROM invitacion) THEN tok.token ELSE '' END AS token,\n       lower($3) AS correo, $2::text AS nombre, $10::text AS frontend_url,\n       CASE WHEN NOT $9 THEN (SELECT count(*) FROM public.citas c WHERE c.tecnico_id = $1 AND c.estado = 'Agendada' AND c.fecha_inicio > now())\n            ELSE 0 END AS citas_afectadas\n  FROM tok;",
+        "options": {
+          "queryReplacement": "={{ [$json.tec_id, $json.nombre, $json.correo_tecnico, $json.telefono, $json.zona, $json.hora_inicio, $json.hora_fin, $json.dias, $json.activo, $json.frontend_url] }}"
+        }
+      },
+      "name": "Guardar técnico",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1460,
+        1840
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "9Gs2DA8EZ8914KDZ",
+          "name": "Postgres account"
+        }
+      },
+      "id": "00970376-5304-5bcd-946f-c5fce14f1d84"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ !$json.zona_ok ? { success: false, status: 'invalid', message: 'La zona seleccionada no existe.' } : $json.ya_existia ? { success: false, status: 'duplicated', message: 'Ese correo ya está registrado como técnico.' } : !$json.tecnico_id ? { success: false, status: 'not_found', message: 'No se encontró el técnico.' } : { success: true, status: 'ok', tecnico_id: Number($json.tecnico_id), message: 'Técnico guardado.' + ($json.token ? ' Le enviamos un correo para que active su cuenta y defina su contraseña.' : '') + (Number($json.citas_afectadas) > 0 ? ' Atención: tiene ' + $json.citas_afectadas + ' visita(s) agendada(s); reasígnalas.' : '') } }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "name": "Responder técnico guardado",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1700,
+        1840
+      ],
+      "id": "b1d9784b-cbbf-55c0-b404-4f566d4106bc"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "b55b63a6-ebce-5f9a-abf1-b613939f3dee",
+              "leftValue": "={{ !!$json.token }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "name": "¿Enviar invitación?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1940,
+        1840
+      ],
+      "id": "b685dd4b-aeb2-5820-822b-c42bb6137943"
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.correo }}",
+        "subject": "Activa tu cuenta de técnico — Soporte Técnico",
+        "emailType": "html",
+        "message": "=<div style=\"font-family:Arial,sans-serif;font-size:14px;color:#172b4d\">Hola {{ $json.nombre }},<br><br>Te registraron como técnico en la plataforma de soporte. Define tu contraseña con este enlace (válido por 72 horas):<br><br><a href=\"{{ $json.frontend_url }}/resetPassword.html?token={{ $json.token }}\">Activar mi cuenta</a><br><br>Después inicia sesión con este correo para ver tus visitas.<br><br>Equipo de Soporte Técnico</div>",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "name": "Invitar al técnico a activar su cuenta",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        2180,
+        1840
+      ],
+      "webhookId": "63f17b86-7f11-5eb2-8fa6-92dc98f19193",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "RRhqAKrSTV5WDEoW",
+          "name": "Gmail account"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "id": "c7cd7b21-a88e-5812-9691-27dee48ee969"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH ins AS (\n  INSERT INTO public.ausencias_tecnicos (tecnico_id, desde, hasta, motivo)\n  SELECT id, $2::date, $3::date, $4 FROM public.tecnicos WHERE id = $1\n  RETURNING id\n)\nSELECT (SELECT id FROM ins) AS id,\n       (SELECT string_agg('#' || c.ticket_id, ', ' ORDER BY c.fecha_inicio) FROM public.citas c\n         WHERE c.tecnico_id = $1 AND c.estado = 'Agendada'\n           AND (c.fecha_inicio AT TIME ZONE 'America/Bogota')::date BETWEEN $2::date AND $3::date) AS conflictos;",
+        "options": {
+          "queryReplacement": "={{ [$json.tec_id, $json.aus_desde, $json.aus_hasta, $json.motivo] }}"
+        }
+      },
+      "name": "Registrar ausencia del técnico",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1460,
+        2020
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "9Gs2DA8EZ8914KDZ",
+          "name": "Postgres account"
+        }
+      },
+      "id": "8a73eba9-9f93-5c7c-ad54-b2d9a9adfb2c"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json.id ? { success: true, status: 'ok', id: Number($json.id), conflictos: $json.conflictos, message: 'Ausencia registrada: no se le asignarán visitas en esas fechas.' + ($json.conflictos ? ' Tiene visitas agendadas que debes reasignar: ' + $json.conflictos : '') } : { success: false, status: 'not_found', message: 'No se encontró el técnico.' } }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "name": "Responder ausencia registrada",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1700,
+        2020
+      ],
+      "id": "6b3b357b-d204-5973-b8a0-034ac852969f"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH d AS (DELETE FROM public.ausencias_tecnicos WHERE id = $1 RETURNING id)\nSELECT (SELECT id FROM d) AS id;",
+        "options": {
+          "queryReplacement": "={{ [$json.ausencia_id] }}"
+        }
+      },
+      "name": "Eliminar ausencia",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1460,
+        2200
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "9Gs2DA8EZ8914KDZ",
+          "name": "Postgres account"
+        }
+      },
+      "id": "4d9b49ee-05c8-538b-8819-12776d7242a1"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json.id ? { success: true, status: 'ok', message: 'Ausencia eliminada.' } : { success: false, status: 'not_found', message: 'No se encontró la ausencia.' } }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "name": "Responder ausencia eliminada",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1700,
+        2200
+      ],
+      "id": "db587ac6-4e4d-5c5e-97b4-56a3002d4e68"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH ins AS (\n  INSERT INTO public.zonas (nombre, palabras_clave, activo)\n  SELECT $2, $3, $4 WHERE $1 = 0\n  ON CONFLICT (nombre) DO NOTHING\n  RETURNING id\n), upd AS (\n  UPDATE public.zonas SET nombre = $2, palabras_clave = $3, activo = $4\n   WHERE id = $1 AND $1 <> 0 AND NOT EXISTS (SELECT 1 FROM public.zonas o WHERE o.nombre = $2 AND o.id <> $1)\n  RETURNING id\n)\nSELECT COALESCE((SELECT id FROM ins), (SELECT id FROM upd)) AS id;",
+        "options": {
+          "queryReplacement": "={{ [$json.zona_id, $json.zona, $json.palabras_clave, $json.activo] }}"
+        }
+      },
+      "name": "Guardar zona de atención",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1460,
+        2380
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "9Gs2DA8EZ8914KDZ",
+          "name": "Postgres account"
+        }
+      },
+      "id": "40b8b3a4-d6f7-5445-82bf-e1c81eb18ed2"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json.id ? { success: true, status: 'ok', id: Number($json.id), message: 'Zona guardada.' } : { success: false, status: 'duplicated', message: 'Ya existe una zona con ese nombre.' } }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "name": "Responder zona guardada",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1700,
+        2380
+      ],
+      "id": "c0fdc65e-0cf8-564f-8a86-baf49e1620c3"
+    }
+  ],
+  "connections": {
+    "Webhook gestion": {
+      "main": [
+        [
+          {
+            "node": "Validar petición de gestión",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar petición de gestión": {
+      "main": [
+        [
+          {
+            "node": "¿Petición válida?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Petición válida?": {
+      "main": [
+        [
+          {
+            "node": "Responder petición inválida",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Validar sesión y obtener rol",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar sesión y obtener rol": {
+      "main": [
+        [
+          {
+            "node": "Autorizar acción según rol",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Autorizar acción según rol": {
+      "main": [
+        [
+          {
+            "node": "Enrutar acción autorizada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enrutar acción autorizada": {
+      "main": [
+        [
+          {
+            "node": "Responder acceso denegado",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Calcular indicadores gerenciales",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Consultar tickets (paginado)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Consultar trazabilidad del caso",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Consultar auditoría de accesos",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Listar base de conocimiento",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Guardar artículo de conocimiento",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Consultar monitoreo operativo",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Listar técnicos y zonas",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Guardar técnico",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Registrar ausencia del técnico",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Eliminar ausencia",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Guardar zona de atención",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calcular indicadores gerenciales": {
+      "main": [
+        [
+          {
+            "node": "Responder datos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consultar tickets (paginado)": {
+      "main": [
+        [
+          {
+            "node": "Responder datos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consultar trazabilidad del caso": {
+      "main": [
+        [
+          {
+            "node": "Responder datos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consultar auditoría de accesos": {
+      "main": [
+        [
+          {
+            "node": "Responder datos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Listar base de conocimiento": {
+      "main": [
+        [
+          {
+            "node": "Responder datos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guardar artículo de conocimiento": {
+      "main": [
+        [
+          {
+            "node": "Responder artículo guardado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consultar monitoreo operativo": {
+      "main": [
+        [
+          {
+            "node": "Responder datos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Listar técnicos y zonas": {
+      "main": [
+        [
+          {
+            "node": "Responder datos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guardar técnico": {
+      "main": [
+        [
+          {
+            "node": "Responder técnico guardado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Responder técnico guardado": {
+      "main": [
+        [
+          {
+            "node": "¿Enviar invitación?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Enviar invitación?": {
+      "main": [
+        [
+          {
+            "node": "Invitar al técnico a activar su cuenta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Registrar ausencia del técnico": {
+      "main": [
+        [
+          {
+            "node": "Responder ausencia registrada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Eliminar ausencia": {
+      "main": [
+        [
+          {
+            "node": "Responder ausencia eliminada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guardar zona de atención": {
+      "main": [
+        [
+          {
+            "node": "Responder zona guardada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "id": "stGestion07v1abc",
+  "tags": []
+}

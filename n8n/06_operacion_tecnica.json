@@ -1,0 +1,1254 @@
+{
+  "name": "06 — Operación técnica: agenda, visitas, resultados y actas",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "soporte/operacion",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "name": "Webhook operacion",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        600
+      ],
+      "webhookId": "15691b70-1810-51cf-bae8-18e99df88583",
+      "id": "c75cda09-70a9-53b8-a4e4-0ca5626f2d0b"
+    },
+    {
+      "parameters": {
+        "jsCode": "const b = $json.body ?? $json;\nconst txt = (v, max) => String(v ?? '').trim().slice(0, max);\nconst entero = (v) => Number.parseInt(v, 10) || 0;\nconst fecha = (v) => /^\\d{4}-\\d{2}-\\d{2}$/.test(String(v ?? '')) ? String(v) : '';\nconst accion = txt(b.accion ?? b.action, 40).toLowerCase();\nconst session_token = txt(b.session_token, 200);\n\nconst FRONTEND_URL = 'http://localhost:3000'; // cámbialo cuando tengas dominio\nconst ADMIN_EMAIL = 'milenahoyossss@gmail.com';\nconst RESULTADOS = ['Resuelto', 'Requiere nueva visita', 'No resuelto'];\nconst ACCIONES = ['cola_tecnico', 'agenda', 'iniciar_visita', 'registrar_resultado', 'datos_acta',\n                  'adjuntar_acta', 'horarios_libres', 'asignar_tecnico'];\n\n// Semana actual (lunes a domingo, hora Colombia) si no se envían fechas\nconst hoy = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' }));\nconst lunes = new Date(hoy); lunes.setDate(hoy.getDate() - ((hoy.getDay() + 6) % 7));\nconst domingo = new Date(lunes); domingo.setDate(lunes.getDate() + 6);\nconst iso = (f) => `${f.getFullYear()}-${String(f.getMonth() + 1).padStart(2, '0')}-${String(f.getDate()).padStart(2, '0')}`;\n\nconst d = {\n  accion, session_token,\n  ticket_id: entero(b.ticket_id),\n  tecnico_id: entero(b.tecnico_id),\n  desde: fecha(b.desde) || iso(lunes),\n  hasta: fecha(b.hasta) || iso(domingo),\n  fecha_inicio: txt(b.fecha_inicio, 40),\n  diagnostico: txt(b.diagnostico, 4000),\n  trabajo_realizado: txt(b.trabajo_realizado, 4000),\n  repuestos: txt(b.repuestos, 1000),\n  resultado: txt(b.resultado, 30),\n  observaciones: txt(b.observaciones, 2000),\n  archivo: txt(b.archivo, 120),\n  sha256: txt(b.sha256, 64).toLowerCase(),\n  pdf_base64: String(b.pdf_base64 ?? ''),\n  frontend_url: FRONTEND_URL,\n  admin_email: ADMIN_EMAIL,\n};\n\nlet error = '', status = 'invalid';\nif (!ACCIONES.includes(accion)) error = 'Acción no válida.';\nelse if (!session_token) { error = 'Inicia sesión para continuar.'; status = 'unauthorized'; }\nelse if (['iniciar_visita', 'registrar_resultado', 'datos_acta', 'adjuntar_acta', 'asignar_tecnico'].includes(accion) && d.ticket_id < 1)\n  error = 'Número de ticket inválido.';\nelse if (accion === 'registrar_resultado' && d.diagnostico.length < 5) error = 'Escribe el diagnóstico (mínimo 5 caracteres).';\nelse if (accion === 'registrar_resultado' && d.trabajo_realizado.length < 5) error = 'Describe el trabajo realizado (mínimo 5 caracteres).';\nelse if (accion === 'registrar_resultado' && !RESULTADOS.includes(d.resultado)) error = 'Selecciona el resultado de la visita.';\nelse if (accion === 'adjuntar_acta' && !/^ticket-\\d+-[0-9a-f]{24}\\.pdf$/.test(d.archivo)) error = 'Nombre de acta no válido.';\nelse if (accion === 'adjuntar_acta' && !/^[0-9a-f]{64}$/.test(d.sha256)) error = 'Huella del acta no válida.';\nelse if (accion === 'adjuntar_acta' && !d.pdf_base64.startsWith('JVBER')) error = 'El acta debe ser un PDF.';\nelse if (['horarios_libres', 'asignar_tecnico'].includes(accion) && d.tecnico_id < 1) error = 'Selecciona un técnico.';\nelse if (accion === 'asignar_tecnico' && Number.isNaN(Date.parse(d.fecha_inicio))) error = 'Selecciona la fecha y hora de la visita.';\nif (accion === 'asignar_tecnico' && !error) d.fecha_inicio = new Date(d.fecha_inicio).toISOString();\n\nreturn [{ json: { ...d, ruta: error ? 'invalido' : 'sesion', error, status } }];\n"
+      },
+      "name": "Validar petición de operación",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        600
+      ],
+      "id": "7a56303a-57e3-5378-b6b2-134295c48b0c"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "ae9f4cbe-0df9-58dd-9cde-1581fb2d815d",
+                    "leftValue": "={{ $json.ruta }}",
+                    "rightValue": "invalido",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "invalido"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "0d908b84-bca9-593d-a7e5-b5dd1a2049f1",
+                    "leftValue": "={{ $json.ruta }}",
+                    "rightValue": "sesion",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "sesion"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "¿Petición válida?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        440,
+        600
+      ],
+      "id": "59d9395b-026c-58d4-9ce5-071a7517d93f"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: false, status: $json.status, message: $json.error } }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "name": "Responder petición inválida",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        700,
+        400
+      ],
+      "id": "ac5f9bb5-d38c-5bb4-9f29-cfd8d5fb9702"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT u.id AS usuario_id, u.nombre_completo, u.correo, u.rol, te.id AS tecnico_id\n  FROM (SELECT 1) seed\n  LEFT JOIN public.sesiones_usuario s\n         ON s.token_hash = encode(digest($1::text, 'sha256'), 'hex') AND s.revocado_en IS NULL AND s.expira_en > now()\n  LEFT JOIN public.usuarios u ON u.id = s.usuario_id AND u.activo\n  LEFT JOIN public.tecnicos te ON te.usuario_id = u.id AND te.activo\n LIMIT 1;",
+        "options": {
+          "queryReplacement": "={{ [$json.session_token] }}"
+        }
+      },
+      "name": "Validar sesión y obtener rol",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        700,
+        600
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "9Gs2DA8EZ8914KDZ",
+          "name": "Postgres account"
+        }
+      },
+      "id": "5501cd96-02c9-53c3-a31b-2bacd4ac91dd"
+    },
+    {
+      "parameters": {
+        "jsCode": "const req = $('Validar petición de operación').first().json;\nconst s = $input.first().json;\nconst permisos = {\"cola_tecnico\": [\"tecnico\"], \"agenda\": [\"tecnico\", \"admin\"], \"iniciar_visita\": [\"tecnico\"], \"registrar_resultado\": [\"tecnico\"], \"datos_acta\": [\"tecnico\", \"admin\"], \"adjuntar_acta\": [\"tecnico\", \"admin\"], \"horarios_libres\": [\"admin\"], \"asignar_tecnico\": [\"admin\"]};\nlet ruta = req.accion, status = 'ok', message = '';\nif (!s.usuario_id) {\n  ruta = 'denegado'; status = 'unauthorized'; message = 'Tu sesión expiró o no es válida. Inicia sesión nuevamente.';\n} else if (!(permisos[req.accion] || []).includes(s.rol)) {\n  ruta = 'denegado'; status = 'forbidden'; message = 'Tu cuenta no tiene permiso para esta acción.';\n} else if (s.rol === 'tecnico' && !s.tecnico_id) {\n  ruta = 'denegado'; status = 'forbidden'; message = 'Tu usuario técnico no está activo en la tabla de técnicos.';\n}\nreturn [{ json: { ...req, ruta, status, message,\n  auth_usuario_id: Number(s.usuario_id || 0), auth_nombre: s.nombre_completo || '', auth_correo: s.correo || '',\n  auth_rol: s.rol || '', auth_tecnico_id: Number(s.tecnico_id || 0) } }];\n"
+      },
+      "name": "Autorizar acción según rol",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        940,
+        600
+      ],
+      "id": "47de0fc6-4f40-57ba-92b4-b6d4ed7843d3"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "8ef2250b-24c7-5f4d-952e-9a7e104cfa90",
+                    "leftValue": "={{ $json.ruta }}",
+                    "rightValue": "denegado",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "denegado"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "9906e263-37ac-56df-979f-377716694249",
+                    "leftValue": "={{ $json.ruta }}",
+                    "rightValue": "cola_tecnico",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "cola_tecnico"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "71f3d729-907b-5d7e-865c-c0d9509c9e29",
+                    "leftValue": "={{ $json.ruta }}",
+                    "rightValue": "agenda",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "agenda"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "f1ae4c2c-f135-5ef9-900d-4e13c080dc5d",
+                    "leftValue": "={{ $json.ruta }}",
+                    "rightValue": "iniciar_visita",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "iniciar_visita"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "1015ca7d-2fb8-5474-9bf0-f343d66bd83f",
+                    "leftValue": "={{ $json.ruta }}",
+                    "rightValue": "registrar_resultado",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "registrar_resultado"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "40b4701b-d874-5698-9326-8fbcd77162ca",
+                    "leftValue": "={{ $json.ruta }}",
+                    "rightValue": "datos_acta",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "datos_acta"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "d2dbf7d4-324b-5de1-bcb0-a3e3bfeed396",
+                    "leftValue": "={{ $json.ruta }}",
+                    "rightValue": "adjuntar_acta",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "adjuntar_acta"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "382766d4-1640-545d-8f3d-0c3aaef32bbd",
+                    "leftValue": "={{ $json.ruta }}",
+                    "rightValue": "horarios_libres",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "horarios_libres"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "fac89faa-f88f-5f70-913d-51eac0255d4b",
+                    "leftValue": "={{ $json.ruta }}",
+                    "rightValue": "asignar_tecnico",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "asignar_tecnico"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Enrutar acción autorizada",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        1180,
+        600
+      ],
+      "id": "c23f5858-f879-5530-80c4-48489c9794f1"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: false, status: $json.status, message: $json.message } }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "name": "Responder acceso denegado",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1460,
+        300
+      ],
+      "id": "e87e415c-0535-5e8f-8396-57e179a7815d"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ Object.assign({ success: true, status: 'ok' }, $json.data) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "name": "Responder lista",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1940,
+        800
+      ],
+      "id": "d3b19b46-f179-50c2-99ab-7f3a0d625369"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT jsonb_build_object('tickets', COALESCE(jsonb_agg(x ORDER BY x.fecha_visita NULLS LAST, x.puntaje_prioridad DESC), '[]'::jsonb)) AS data\n  FROM (\n    SELECT t.id AS ticket_id, t.nombre_completo, t.correo, t.telefono, t.direccion, t.tipo_dispositivo,\n           left(t.descripcion_problema, 300) AS descripcion, t.estado, t.fecha_creacion, t.fecha_visita,\n           t.nivel_impacto, t.categoria, t.prioridad, t.puntaje_prioridad,\n           c.id AS cita_id, c.cuadrante, c.hora_llegada\n      FROM public.tickets_soporte t\n      LEFT JOIN public.citas c ON c.ticket_id = t.id AND c.estado = 'Agendada'\n     WHERE t.tecnico_asignado_id = $1 AND t.estado IN ('Agendado', 'En atención')\n  ) x;",
+        "options": {
+          "queryReplacement": "={{ [$json.auth_tecnico_id] }}"
+        }
+      },
+      "name": "Consultar cola del técnico",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1460,
+        400
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "9Gs2DA8EZ8914KDZ",
+          "name": "Postgres account"
+        }
+      },
+      "id": "73016889-0f36-5777-9a2e-08f7d323e8e2"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT jsonb_build_object(\n  'desde', $1::text, 'hasta', $2::text,\n  'citas', COALESCE((\n     SELECT jsonb_agg(x ORDER BY x.fecha_inicio) FROM (\n       SELECT c.id AS cita_id, c.ticket_id, c.tecnico_id, te.nombre AS tecnico_nombre, te.cuadrante AS tecnico_cuadrante,\n              c.fecha_inicio, c.duracion_min, c.cuadrante, c.estado, c.hora_llegada, c.hora_salida,\n              t.nombre_completo, t.direccion, t.telefono, t.prioridad, t.estado AS estado_ticket,\n              left(t.descripcion_problema, 120) AS descripcion\n         FROM public.citas c\n         JOIN public.tickets_soporte t ON t.id = c.ticket_id\n         JOIN public.tecnicos te ON te.id = c.tecnico_id\n        WHERE c.fecha_inicio >= ($1::date)::timestamp AT TIME ZONE 'America/Bogota'\n          AND c.fecha_inicio <  ($2::date + 1)::timestamp AT TIME ZONE 'America/Bogota'\n          AND c.estado IN ('Agendada', 'Realizada', 'Completada')\n          AND (($3 = 'admin' AND ($4 = 0 OR c.tecnico_id = $4)) OR ($3 = 'tecnico' AND c.tecnico_id = $5))\n     ) x), '[]'::jsonb),\n  'tecnicos', CASE WHEN $3 = 'admin' THEN COALESCE((\n     SELECT jsonb_agg(jsonb_build_object('tecnico_id', te.id, 'nombre', te.nombre, 'cuadrante', te.cuadrante)\n                      ORDER BY te.cuadrante, te.nombre)\n       FROM public.tecnicos te WHERE te.activo), '[]'::jsonb) ELSE '[]'::jsonb END\n) AS data;",
+        "options": {
+          "queryReplacement": "={{ [$json.desde, $json.hasta, $json.auth_rol, $json.tecnico_id, $json.auth_tecnico_id] }}"
+        }
+      },
+      "name": "Consultar agenda técnica",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1460,
+        580
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "9Gs2DA8EZ8914KDZ",
+          "name": "Postgres account"
+        }
+      },
+      "id": "b550348b-860d-5785-9983-981f94a71130"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH t0 AS (\n  SELECT t.id FROM public.tickets_soporte t\n   WHERE t.id = $1 AND t.tecnico_asignado_id = $2 AND t.estado = 'Agendado'\n   FOR UPDATE\n), upd AS (\n  UPDATE public.tickets_soporte t SET estado = 'En atención' FROM t0 WHERE t.id = t0.id RETURNING t.id\n), cita AS (\n  UPDATE public.citas c SET hora_llegada = now()\n   WHERE c.ticket_id IN (SELECT id FROM upd) AND c.estado = 'Agendada'\n), audit AS (\n  INSERT INTO public.auditoria_tickets (ticket_id, actor, accion, estado_anterior, estado_nuevo, detalle)\n  SELECT id, 'tecnico:' || $2, 'inicio_visita', 'Agendado', 'En atención', jsonb_build_object('hora_llegada', now()) FROM upd\n)\nSELECT (SELECT id FROM upd) AS ticket_id, now() AS hora_llegada;",
+        "options": {
+          "queryReplacement": "={{ [$json.ticket_id, $json.auth_tecnico_id] }}"
+        }
+      },
+      "name": "Registrar llegada del técnico",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1460,
+        760
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "9Gs2DA8EZ8914KDZ",
+          "name": "Postgres account"
+        }
+      },
+      "id": "83253da7-9f54-5fdb-bf15-5f9574f7b57f"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json.ticket_id ? { success: true, status: 'ok', ticket_id: $json.ticket_id, hora_llegada: $json.hora_llegada, message: 'Llegada registrada. El ticket está en atención.' } : { success: false, status: 'not_allowed', message: 'La visita no está agendada a tu nombre o ya fue iniciada.' } }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "name": "Responder inicio de visita",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1700,
+        760
+      ],
+      "id": "e5519fdf-915b-55da-a373-028a21db71d6"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH t0 AS (\n  SELECT t.id, t.estado FROM public.tickets_soporte t\n   WHERE t.id = $1 AND t.tecnico_asignado_id = $2 AND t.estado IN ('Agendado', 'En atención')\n   FOR UPDATE\n), cita AS (\n  UPDATE public.citas c SET estado = 'Realizada', hora_llegada = COALESCE(c.hora_llegada, now()), hora_salida = now()\n   WHERE c.ticket_id IN (SELECT id FROM t0) AND c.estado = 'Agendada'\n  RETURNING c.id, c.hora_llegada\n), res AS (\n  INSERT INTO public.resultados_visita (ticket_id, cita_id, tecnico_id, diagnostico, trabajo_realizado, repuestos,\n                                        resultado, observaciones, hora_llegada, hora_salida)\n  SELECT t0.id, (SELECT id FROM cita LIMIT 1), $2, $3, $4, NULLIF($5, ''), $6, NULLIF($7, ''),\n         COALESCE((SELECT hora_llegada FROM cita LIMIT 1), now()), now()\n    FROM t0\n  RETURNING id\n), nuevo AS (\n  SELECT t0.id, t0.estado AS anterior,\n         CASE WHEN $6 = 'Resuelto' THEN 'Pendiente de confirmación' ELSE 'Pendiente de asignación' END AS estado\n    FROM t0\n), upd AS (\n  UPDATE public.tickets_soporte t\n     SET estado = n.estado,\n         tecnico_asignado_id = CASE WHEN n.estado = 'Pendiente de asignación' THEN NULL ELSE t.tecnico_asignado_id END,\n         fecha_visita = CASE WHEN n.estado = 'Pendiente de asignación' THEN NULL ELSE t.fecha_visita END,\n         fecha_limite_atencion = CASE WHEN n.estado = 'Pendiente de asignación' THEN now() + interval '48 hours'\n                                      ELSE t.fecha_limite_atencion END,\n         sla_notificado = false\n    FROM nuevo n WHERE t.id = n.id\n  RETURNING t.id AS ticket_id, t.estado, t.nombre_completo, t.telefono, t.direccion\n), audit AS (\n  INSERT INTO public.auditoria_tickets (ticket_id, actor, accion, estado_anterior, estado_nuevo, detalle)\n  SELECT n.id, 'tecnico:' || $2, 'resultado_visita', n.anterior, n.estado,\n         jsonb_build_object('resultado', $6::text, 'resultado_id', (SELECT id FROM res))\n    FROM nuevo n\n)\nSELECT upd.*, (SELECT id FROM res) AS resultado_id, $6::text AS resultado, $3::text AS diagnostico,\n       $8::text AS admin_email\n  FROM (SELECT 1) seed LEFT JOIN upd ON true;",
+        "options": {
+          "queryReplacement": "={{ [$json.ticket_id, $json.auth_tecnico_id, $json.diagnostico, $json.trabajo_realizado, $json.repuestos, $json.resultado, $json.observaciones, $json.admin_email] }}"
+        }
+      },
+      "name": "Registrar resultado de la visita",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1460,
+        940
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "9Gs2DA8EZ8914KDZ",
+          "name": "Postgres account"
+        }
+      },
+      "id": "ae8d7627-7bde-5e5d-9881-6b5a54994fb8"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json.ticket_id ? { success: true, status: 'ok', ticket_id: $json.ticket_id, estado: $json.estado, resultado_id: $json.resultado_id } : { success: false, status: 'not_allowed', message: 'No se registró: la visita no está asignada a ti o ya tiene resultado.' } }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "name": "Responder resultado registrado",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1700,
+        940
+      ],
+      "id": "5e6158bc-b4c0-5806-91e4-aafbc61f5f59"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "345e96ab-c54c-587d-83f4-b5e353f377e3",
+              "leftValue": "={{ $json.estado === 'Pendiente de asignación' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "name": "¿Requiere nueva visita?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1940,
+        940
+      ],
+      "id": "c66c2e1c-4b5c-5dee-a00b-5ae8d709ccf8"
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.admin_email }}",
+        "subject": "=Visita sin solución — Ticket #{{ $json.ticket_id }}",
+        "emailType": "html",
+        "message": "=<div style=\"font-family:Arial,sans-serif;font-size:14px;color:#172b4d\">El técnico registró la visita como <b>{{ $json.resultado }}</b>.<br><b>Ticket:</b> #{{ $json.ticket_id }}<br><b>Cliente:</b> {{ $json.nombre_completo }} — {{ $json.telefono }}<br><b>Diagnóstico:</b> {{ $json.diagnostico }}<br><br>El caso quedó pendiente de una nueva asignación en el Dashboard.<br><br>Equipo de Soporte Técnico</div>",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "name": "Avisar seguimiento a administración",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        2180,
+        940
+      ],
+      "webhookId": "4361a1bc-09cc-5a2b-b571-caf404f76051",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "RRhqAKrSTV5WDEoW",
+          "name": "Gmail account"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "id": "ad560193-9ac1-521e-9239-0aabbdc3c4bc"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT t.id AS ticket_id, t.nombre_completo, t.identificacion, t.correo, t.telefono, t.direccion, t.tipo_dispositivo,\n       t.descripcion_problema, t.prioridad, t.categoria, t.fecha_creacion, t.estado,\n       r.id AS resultado_id, r.diagnostico, r.trabajo_realizado, r.repuestos, r.resultado, r.observaciones,\n       r.hora_llegada, r.hora_salida, r.creado_en AS fecha_resultado,\n       te.id AS tecnico_id, te.nombre AS tecnico_nombre, te.telefono AS tecnico_telefono, te.cuadrante,\n       c.fecha_inicio AS fecha_programada\n  FROM (SELECT 1) seed\n  LEFT JOIN LATERAL (SELECT * FROM public.resultados_visita rv WHERE rv.ticket_id = $1\n                      ORDER BY rv.creado_en DESC, rv.id DESC LIMIT 1) r ON true\n  LEFT JOIN public.tickets_soporte t ON t.id = r.ticket_id AND ($3 = 'admin' OR r.tecnico_id = $2)\n  LEFT JOIN public.tecnicos te ON te.id = r.tecnico_id\n  LEFT JOIN public.citas c ON c.id = r.cita_id;",
+        "options": {
+          "queryReplacement": "={{ [$json.ticket_id, $json.auth_tecnico_id, $json.auth_rol] }}"
+        }
+      },
+      "name": "Consultar datos del acta",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1460,
+        1120
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "9Gs2DA8EZ8914KDZ",
+          "name": "Postgres account"
+        }
+      },
+      "id": "9d623f0a-4654-5537-a05e-d41c4d7ed11d"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json.ticket_id ? { success: true, status: 'ok', data: $json } : { success: false, status: 'not_found', message: 'El ticket no tiene un resultado de visita registrado por ti.' } }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "name": "Responder datos del acta",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1700,
+        1120
+      ],
+      "id": "0c8cea11-c68d-5486-a07f-361f0fedfe45"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH r AS (\n  SELECT rv.id, rv.tecnico_id, rv.resultado FROM public.resultados_visita rv\n   WHERE rv.ticket_id = $1 ORDER BY rv.creado_en DESC, rv.id DESC LIMIT 1\n), upd AS (\n  UPDATE public.tickets_soporte t SET url_acta = $4, acta_sha256 = $5\n    FROM r WHERE t.id = $1 AND ($3 = 'admin' OR r.tecnico_id = $2)\n  RETURNING t.id AS ticket_id, t.nombre_completo, t.correo, t.estado, r.resultado\n), audit AS (\n  INSERT INTO public.auditoria_tickets (ticket_id, actor, accion, estado_nuevo, detalle)\n  SELECT ticket_id, CASE WHEN $3 = 'admin' THEN 'admin:' ELSE 'tecnico:' END || $2, 'acta_generada', estado,\n         jsonb_build_object('archivo', $4::text, 'sha256', $5::text)\n    FROM upd\n)\nSELECT upd.*, $6::text AS frontend_url FROM (SELECT 1) seed LEFT JOIN upd ON true;",
+        "options": {
+          "queryReplacement": "={{ [$json.ticket_id, $json.auth_rol === 'admin' ? $json.auth_usuario_id : $json.auth_tecnico_id, $json.auth_rol, $json.archivo, $json.sha256, $json.frontend_url] }}"
+        }
+      },
+      "name": "Guardar acta en el ticket",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1460,
+        1300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "9Gs2DA8EZ8914KDZ",
+          "name": "Postgres account"
+        }
+      },
+      "id": "754fa2d3-989f-5db4-9280-38ef6fd42095"
+    },
+    {
+      "parameters": {
+        "jsCode": "// El PDF llega en base64 desde server.js; se adjunta al correo del cliente.\nconst fila = $input.first().json;\nconst req = $('Validar petición de operación').first().json;\nif (!fila.ticket_id) return [{ json: { ...fila, enviar: false } }];\nreturn [{\n  json: { ...fila, enviar: true, resuelto: fila.resultado === 'Resuelto' },\n  binary: { acta: { data: req.pdf_base64, mimeType: 'application/pdf', fileName: `acta-servicio-ticket-${fila.ticket_id}.pdf` } },\n}];\n"
+      },
+      "name": "Preparar PDF adjunto",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1700,
+        1300
+      ],
+      "id": "cbb8cc8b-86e5-5f60-ab54-1e68c2f365c8"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json.enviar ? { success: true, status: 'ok', ticket_id: $json.ticket_id, message: 'Acta generada y enviada al cliente.' } : { success: false, status: 'not_found', message: 'No se pudo asociar el acta al ticket.' } }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "name": "Responder acta guardada",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1940,
+        1300
+      ],
+      "id": "ce797912-4f6a-5cf5-98e6-9037a676528f"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "b5fb9d49-b3cc-51e3-8f08-0579f3b3d8aa",
+              "leftValue": "={{ $json.enviar === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "name": "¿Notificar al cliente?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2180,
+        1300
+      ],
+      "id": "035049b2-3c25-56b9-9656-529a82602fdf"
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.correo }}",
+        "subject": "=Servicio técnico finalizado — Ticket #{{ $json.ticket_id }}",
+        "emailType": "html",
+        "message": "=<div style=\"font-family:Arial,sans-serif;font-size:14px;color:#172b4d\">Hola {{ $json.nombre_completo }},<br><br>El técnico terminó la visita de tu ticket <b>#{{ $json.ticket_id }}</b>.<br><b>Resultado:</b> {{ $json.resultado }}<br>Adjuntamos el acta del servicio en PDF.<br><br>{{ $json.resuelto ? 'Por favor confirma si el problema quedó resuelto respondiendo la encuesta en' : 'Programaremos una nueva atención. Puedes seguir el caso en' }} <a href=\"{{ $json.frontend_url }}/misTickets.html?ticket={{ $json.ticket_id }}\">Mis tickets</a>.<br><br>Equipo de Soporte Técnico</div>",
+        "options": {
+          "appendAttribution": false,
+          "attachmentsUi": {
+            "attachmentsBinary": [
+              {
+                "property": "acta"
+              }
+            ]
+          }
+        }
+      },
+      "name": "Notificar cierre del servicio al cliente",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        2420,
+        1300
+      ],
+      "webhookId": "c8cb713c-5ee3-54a5-a12e-88e8c179fa02",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "RRhqAKrSTV5WDEoW",
+          "name": "Gmail account"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "id": "66e7f363-dca9-578d-be0a-fcb7c00c9e71"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH dias AS (\n  SELECT d::date AS dia\n    FROM generate_series((now() AT TIME ZONE 'America/Bogota')::date,\n                         (now() AT TIME ZONE 'America/Bogota')::date + 14, interval '1 day') AS d\n), slots AS (\n  SELECT te.id AS tecnico_id, te.nombre AS tecnico_nombre, te.correo AS tecnico_correo, te.cuadrante,\n         ((dias.dia + make_interval(hours => h)) AT TIME ZONE 'America/Bogota') AS inicio\n    FROM public.tecnicos te\n    JOIN public.zonas z ON z.nombre = te.cuadrante AND z.activo\n   CROSS JOIN dias\n   CROSS JOIN LATERAL generate_series(te.hora_inicio::int, te.hora_fin::int - 1) AS h\n   WHERE te.activo\n     AND extract(isodow FROM dias.dia)::smallint = ANY (te.dias_laborales)\n     AND NOT EXISTS (SELECT 1 FROM public.ausencias_tecnicos a\n                      WHERE a.tecnico_id = te.id AND dias.dia BETWEEN a.desde AND a.hasta)\n     AND NOT EXISTS (SELECT 1 FROM public.citas c\n                      WHERE c.tecnico_id = te.id AND c.estado = 'Agendada'\n                        AND c.fecha_inicio < ((dias.dia + make_interval(hours => h)) AT TIME ZONE 'America/Bogota') + interval '60 minutes'\n                        AND c.fecha_inicio + make_interval(mins => c.duracion_min) > ((dias.dia + make_interval(hours => h)) AT TIME ZONE 'America/Bogota'))\n)\nSELECT jsonb_build_object('horarios', COALESCE((\n  SELECT jsonb_agg(x.inicio ORDER BY x.inicio) FROM (\n    SELECT s.inicio FROM slots s\n     WHERE s.tecnico_id = $1 AND s.inicio > now() + interval '1 hour'\n     ORDER BY s.inicio LIMIT 40) x), '[]'::jsonb)) AS data;",
+        "options": {
+          "queryReplacement": "={{ [$json.tecnico_id] }}"
+        }
+      },
+      "name": "Consultar horarios libres del técnico",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1460,
+        1480
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "9Gs2DA8EZ8914KDZ",
+          "name": "Postgres account"
+        }
+      },
+      "id": "b5d8efd3-836b-5d1d-9954-606e3ecb6f68"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH t0 AS (\n  SELECT t.id, t.estado FROM public.tickets_soporte t\n   WHERE t.id = $1 AND t.estado IN ('Pendiente de asignación', 'Escalado nivel 2', 'Escalamiento pendiente')\n   FOR UPDATE\n), te AS (\n  SELECT id, nombre, correo, cuadrante FROM public.tecnicos WHERE id = $2 AND activo\n), dias AS (\n  SELECT d::date AS dia\n    FROM generate_series((now() AT TIME ZONE 'America/Bogota')::date,\n                         (now() AT TIME ZONE 'America/Bogota')::date + 14, interval '1 day') AS d\n), slots AS (\n  SELECT te.id AS tecnico_id, te.nombre AS tecnico_nombre, te.correo AS tecnico_correo, te.cuadrante,\n         ((dias.dia + make_interval(hours => h)) AT TIME ZONE 'America/Bogota') AS inicio\n    FROM public.tecnicos te\n    JOIN public.zonas z ON z.nombre = te.cuadrante AND z.activo\n   CROSS JOIN dias\n   CROSS JOIN LATERAL generate_series(te.hora_inicio::int, te.hora_fin::int - 1) AS h\n   WHERE te.activo\n     AND extract(isodow FROM dias.dia)::smallint = ANY (te.dias_laborales)\n     AND NOT EXISTS (SELECT 1 FROM public.ausencias_tecnicos a\n                      WHERE a.tecnico_id = te.id AND dias.dia BETWEEN a.desde AND a.hasta)\n     AND NOT EXISTS (SELECT 1 FROM public.citas c\n                      WHERE c.tecnico_id = te.id AND c.estado = 'Agendada'\n                        AND c.fecha_inicio < ((dias.dia + make_interval(hours => h)) AT TIME ZONE 'America/Bogota') + interval '60 minutes'\n                        AND c.fecha_inicio + make_interval(mins => c.duracion_min) > ((dias.dia + make_interval(hours => h)) AT TIME ZONE 'America/Bogota'))\n), cita AS (\n  -- solo en un horario libre real del técnico (horario laboral, sin ausencias ni otra cita)\n  INSERT INTO public.citas (ticket_id, tecnico_id, fecha_inicio, duracion_min, cuadrante, estado)\n  SELECT t0.id, te.id, $3::timestamptz, 60, te.cuadrante, 'Agendada' FROM t0, te\n   WHERE $3::timestamptz > now()\n     AND EXISTS (SELECT 1 FROM slots s WHERE s.tecnico_id = te.id AND s.inicio = $3::timestamptz)\n  ON CONFLICT DO NOTHING\n  RETURNING id, ticket_id, tecnico_id, fecha_inicio, cuadrante\n), upd AS (\n  UPDATE public.tickets_soporte t\n     SET tecnico_asignado_id = c.tecnico_id, fecha_visita = c.fecha_inicio, estado = 'Agendado'\n    FROM cita c WHERE t.id = c.ticket_id\n  RETURNING t.id AS ticket_id, t.nombre_completo, t.correo, t.direccion, t.telefono, t.descripcion_problema,\n            t.estado, t.fecha_visita, t.prioridad, c.id AS cita_id, c.cuadrante\n), audit AS (\n  INSERT INTO public.auditoria_tickets (ticket_id, actor, accion, estado_anterior, estado_nuevo, detalle)\n  SELECT u.ticket_id, 'admin:' || $4, 'asignacion_manual', t0.estado, 'Agendado',\n         jsonb_build_object('tecnico_id', $2, 'fecha_visita', u.fecha_visita)\n    FROM upd u JOIN t0 ON t0.id = u.ticket_id\n)\nSELECT upd.*, te.nombre AS tecnico_nombre, te.correo AS tecnico_correo\n  FROM (SELECT 1) seed LEFT JOIN upd ON true LEFT JOIN te ON upd.ticket_id IS NOT NULL;",
+        "options": {
+          "queryReplacement": "={{ [$json.ticket_id, $json.tecnico_id, $json.fecha_inicio, $json.auth_usuario_id] }}"
+        }
+      },
+      "name": "Asignar técnico manualmente",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1460,
+        1660
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "9Gs2DA8EZ8914KDZ",
+          "name": "Postgres account"
+        }
+      },
+      "id": "bb7246ac-2e7c-5923-a69f-d9cf8f3e6a32"
+    },
+    {
+      "parameters": {
+        "jsCode": "const x = $input.first().json;\nif (!x.ticket_id) {\n  return [{ json: { enviar: false, respuesta: { success: false, status: 'assignment_rejected',\n    message: 'No se pudo asignar: revisa que el ticket esté pendiente y que el horario esté libre en la disponibilidad del técnico (horario laboral, sin ausencias ni otra cita).' } } }];\n}\nconst fecha_local = new Date(x.fecha_visita).toLocaleString('es-CO', { timeZone: 'America/Bogota', dateStyle: 'full', timeStyle: 'short' });\nreturn [{ json: { ...x, fecha_local, enviar: true, respuesta: { success: true, status: 'appointment_scheduled',\n  ticket_id: x.ticket_id, fecha_visita: x.fecha_visita, tecnico_nombre: x.tecnico_nombre,\n  message: `Visita asignada a ${x.tecnico_nombre} para el ${fecha_local} (hora Colombia)` } } }];\n"
+      },
+      "name": "Preparar confirmación de asignación",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1700,
+        1660
+      ],
+      "id": "c8a3547d-6cdf-5624-85df-b35a14b49858"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json.respuesta }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "name": "Responder asignación",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1940,
+        1660
+      ],
+      "id": "23d1ace5-3c20-5033-b2fc-730c51038427"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "9b0c6584-6406-54fd-9f19-f6617bfd39bd",
+              "leftValue": "={{ $json.enviar === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "name": "¿Se asignó?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2180,
+        1660
+      ],
+      "id": "059e5469-b6b8-5cdd-8c9c-f3cc2535d3ba"
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.correo }}",
+        "subject": "=Visita técnica agendada — Ticket #{{ $json.ticket_id }}",
+        "emailType": "html",
+        "message": "=<div style=\"font-family:Arial,sans-serif;font-size:14px;color:#172b4d\">Hola {{ $json.nombre_completo }},<br><br>Agendamos la visita técnica de tu ticket <b>#{{ $json.ticket_id }}</b>.<br><b>Fecha:</b> {{ $json.fecha_local }} (hora Colombia)<br><b>Técnico:</b> {{ $json.tecnico_nombre }}<br><b>Dirección:</b> {{ $json.direccion }}<br><br>Equipo de Soporte Técnico</div>",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "name": "Notificar visita al cliente (manual)",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        2420,
+        1600
+      ],
+      "webhookId": "ee5230e8-abf2-560c-bdf4-dddc1f072ec4",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "RRhqAKrSTV5WDEoW",
+          "name": "Gmail account"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "id": "952709ba-098e-5c0f-bd91-0b091f6a3005"
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.tecnico_correo }}",
+        "subject": "=Nueva visita asignada — Ticket #{{ $json.ticket_id }}",
+        "emailType": "html",
+        "message": "=<div style=\"font-family:Arial,sans-serif;font-size:14px;color:#172b4d\">Se te asignó una visita.<br><b>Ticket:</b> #{{ $json.ticket_id }} — prioridad {{ $json.prioridad }}<br><b>Fecha:</b> {{ $json.fecha_local }}<br><b>Cliente:</b> {{ $json.nombre_completo }} — {{ $json.telefono }}<br><b>Dirección:</b> {{ $json.direccion }}<br><b>Problema:</b> {{ $json.descripcion_problema }}<br><br>Equipo de Soporte Técnico</div>",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "name": "Notificar visita al técnico (manual)",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        2420,
+        1740
+      ],
+      "webhookId": "f318849b-3fb3-5cea-a408-cad34d143cbd",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "RRhqAKrSTV5WDEoW",
+          "name": "Gmail account"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "id": "eed17d8f-185d-588e-8a1a-2c0a29146de5"
+    }
+  ],
+  "connections": {
+    "Webhook operacion": {
+      "main": [
+        [
+          {
+            "node": "Validar petición de operación",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar petición de operación": {
+      "main": [
+        [
+          {
+            "node": "¿Petición válida?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Petición válida?": {
+      "main": [
+        [
+          {
+            "node": "Responder petición inválida",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Validar sesión y obtener rol",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar sesión y obtener rol": {
+      "main": [
+        [
+          {
+            "node": "Autorizar acción según rol",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Autorizar acción según rol": {
+      "main": [
+        [
+          {
+            "node": "Enrutar acción autorizada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enrutar acción autorizada": {
+      "main": [
+        [
+          {
+            "node": "Responder acceso denegado",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Consultar cola del técnico",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Consultar agenda técnica",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Registrar llegada del técnico",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Registrar resultado de la visita",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Consultar datos del acta",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Guardar acta en el ticket",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Consultar horarios libres del técnico",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Asignar técnico manualmente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consultar cola del técnico": {
+      "main": [
+        [
+          {
+            "node": "Responder lista",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consultar agenda técnica": {
+      "main": [
+        [
+          {
+            "node": "Responder lista",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Registrar llegada del técnico": {
+      "main": [
+        [
+          {
+            "node": "Responder inicio de visita",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Registrar resultado de la visita": {
+      "main": [
+        [
+          {
+            "node": "Responder resultado registrado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Responder resultado registrado": {
+      "main": [
+        [
+          {
+            "node": "¿Requiere nueva visita?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Requiere nueva visita?": {
+      "main": [
+        [
+          {
+            "node": "Avisar seguimiento a administración",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consultar datos del acta": {
+      "main": [
+        [
+          {
+            "node": "Responder datos del acta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guardar acta en el ticket": {
+      "main": [
+        [
+          {
+            "node": "Preparar PDF adjunto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar PDF adjunto": {
+      "main": [
+        [
+          {
+            "node": "Responder acta guardada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Responder acta guardada": {
+      "main": [
+        [
+          {
+            "node": "¿Notificar al cliente?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Notificar al cliente?": {
+      "main": [
+        [
+          {
+            "node": "Notificar cierre del servicio al cliente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consultar horarios libres del técnico": {
+      "main": [
+        [
+          {
+            "node": "Responder lista",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Asignar técnico manualmente": {
+      "main": [
+        [
+          {
+            "node": "Preparar confirmación de asignación",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar confirmación de asignación": {
+      "main": [
+        [
+          {
+            "node": "Responder asignación",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Responder asignación": {
+      "main": [
+        [
+          {
+            "node": "¿Se asignó?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Se asignó?": {
+      "main": [
+        [
+          {
+            "node": "Notificar visita al cliente (manual)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Notificar visita al técnico (manual)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "id": "stOperacion06v1a",
+  "tags": []
+}

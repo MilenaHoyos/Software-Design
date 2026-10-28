@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Técnicos y zonas - Plataforma Inteligente de Soporte Técnico</title>
+    <link rel="stylesheet" href="homedisenio.css">
+    <link rel="stylesheet" href="portal.css">
+</head>
+<body>
+    <div class="main-layout">
+        <aside class="sidebar">
+            <div class="sidebar-top">
+                <nav class="nav-menu">
+                    <div class="nav-indicator"></div>
+                    <a href="homeVentana.html" class="nav-link" data-nav="inicio">
+                        <img width="30" height="30" src="Iconos/HomeNegro.png" alt="Inicio" class="custom-icon">
+                        Inicio
+                    </a>
+                    <a href="VenSolicitud.html" class="nav-link" data-nav="soporte">
+                        <img width="30" height="30" src="Iconos/soporte blanco.png" alt="Soporte" class="custom-icon">
+                        Soporte
+                    </a>
+                    <a href="dashboardVentana.html" class="nav-link" data-nav="dashboard">
+                        <img width="30" height="30" src="Iconos/barras.png" alt="Dashboard" class="custom-icon">
+                        Dashboard
+                    </a>
+                    <a href="#" class="nav-link" title="Próximamente">
+                        <img width="30" height="30" src="Iconos/ajustes.png" alt="Ajustes" class="custom-icon">
+                        Ajustes
+                    </a>
+                </nav>
+            </div>
+            <div class="sidebar-footer">
+                <div class="user-profile">
+                    <div class="user-avatar-container">
+                        <img src="Iconos/usuariGris.png" alt="Usuario" class="user-avatar-icon">
+                    </div>
+                    <span class="user-name" id="sidebar-user-name">Usuario</span>
+                </div>
+            </div>
+        </aside>
+
+        <main class="content">
+            <div class="home-container">
+                <section class="welcome-banner">
+                    <div>
+                        <h1>Técnicos y zonas de atención</h1>
+                        <p>Registra técnicos, su zona, horario y días laborales, y sus ausencias. La agenda automática solo usa técnicos activos, en su horario y sin ausencias.</p>
+                    </div>
+                    <button type="button" class="btn-primary-action" id="btn-nuevo">Nuevo técnico</button>
+                </section>
+                <p id="tec-aviso" class="aviso" hidden></p>
+                <div class="dos-columnas">
+                    <section class="panel">
+                        <div class="barra-filtros">
+                            <h2 style="margin: 0 auto 0 0;">Técnicos</h2>
+                            <label>Zona <select id="tec-filtro-zona" class="campo"><option value="">Todas</option></select></label>
+                        </div>
+                        <div class="tabla-wrap">
+                            <table class="tabla" id="tabla-tecnicos">
+                                <thead><tr><th>Nombre</th><th>Zona</th><th>Horario</th><th>Próximas visitas</th><th>Estado</th></tr></thead>
+                                <tbody><tr><td colspan="5" class="vacio">Cargando...</td></tr></tbody>
+                            </table>
+                        </div>
+                    </section>
+                    <section class="panel">
+                        <form id="form-tecnico" class="formulario-columna">
+                            <h2 id="tec-titulo-form">Nuevo técnico</h2>
+                            <label>Nombre completo <input type="text" id="tec-nombre" class="campo" minlength="3" maxlength="150" required></label>
+                            <label>Correo <input type="email" id="tec-correo" class="campo" maxlength="254" required></label>
+                            <label>Teléfono <input type="tel" id="tec-telefono" class="campo" maxlength="30"></label>
+                            <label>Zona de atención <select id="tec-zona" class="campo" required></select></label>
+                            <div class="fila-horas">
+                                <label>Hora de inicio <select id="tec-hora-inicio" class="campo"></select></label>
+                                <label>Hora de fin <select id="tec-hora-fin" class="campo"></select></label>
+                            </div>
+                            <fieldset class="dias-semana" id="tec-dias">
+                                <legend>Días laborales</legend>
+                            </fieldset>
+                            <label style="flex-direction: row; align-items: center; gap: 6px;"><input type="checkbox" id="tec-activo" checked> Activo (recibe visitas)</label>
+                            <p class="card-description" id="tec-cuenta"></p>
+                            <button type="submit" class="btn">Guardar técnico</button>
+                        </form>
+                        <div id="bloque-ausencias" hidden>
+                            <h3 style="margin-top: 22px;">Ausencias</h3>
+                            <ul class="lista-ausencias" id="lista-ausencias"></ul>
+                            <form id="form-ausencia" class="formulario-columna">
+                                <div class="fila-horas">
+                                    <label>Desde <input type="date" id="aus-desde" class="campo" required></label>
+                                    <label>Hasta <input type="date" id="aus-hasta" class="campo" required></label>
+                                </div>
+                                <label>Motivo <input type="text" id="aus-motivo" class="campo" maxlength="200" placeholder="Vacaciones, incapacidad, capacitación..."></label>
+                                <button type="submit" class="btn btn-secundario">Registrar ausencia</button>
+                            </form>
+                        </div>
+                    </section>
+                </div>
+                <section class="panel" style="margin-top: 18px;">
+                    <div class="barra-filtros">
+                        <h2 style="margin: 0 auto 0 0;">Zonas de atención</h2>
+                        <button type="button" class="btn btn-secundario" id="btn-nueva-zona">Nueva zona</button>
+                    </div>
+                    <p class="card-description">Las palabras clave (barrios o localidades separados por coma) permiten deducir la zona a partir de la dirección del cliente.</p>
+                    <div class="dos-columnas">
+                        <div class="tabla-wrap">
+                            <table class="tabla" id="tabla-zonas">
+                                <thead><tr><th>Zona</th><th>Técnicos activos</th><th>Estado</th></tr></thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                        <form id="form-zona" class="formulario-columna">
+                            <h3 id="zona-titulo-form">Nueva zona</h3>
+                            <label>Nombre <input type="text" id="zona-nombre" class="campo" minlength="2" maxlength="12" required></label>
+                            <label>Palabras clave <textarea id="zona-palabras" class="campo" rows="3" maxlength="2000" placeholder="chapinero, teusaquillo, ..."></textarea></label>
+                            <label style="flex-direction: row; align-items: center; gap: 6px;"><input type="checkbox" id="zona-activo" checked> Activa (recibe casos)</label>
+                            <button type="submit" class="btn">Guardar zona</button>
+                        </form>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+    <script src="app.js"></script>
+    <script src="tecnicosApp.js"></script>
+</body>
+</html>

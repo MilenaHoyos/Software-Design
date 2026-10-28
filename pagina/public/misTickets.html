@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mis tickets - Plataforma Inteligente de Soporte Técnico</title>
+    <link rel="stylesheet" href="homedisenio.css">
+    <link rel="stylesheet" href="portal.css">
+</head>
+<body>
+    <div class="main-layout">
+        <aside class="sidebar">
+            <div class="sidebar-top">
+                <nav class="nav-menu">
+                    <div class="nav-indicator"></div>
+                    <a href="homeVentana.html" class="nav-link" data-nav="inicio">
+                        <img width="30" height="30" src="Iconos/HomeNegro.png" alt="Inicio" class="custom-icon">
+                        Inicio
+                    </a>
+                    <a href="VenSolicitud.html" class="nav-link" data-nav="soporte">
+                        <img width="30" height="30" src="Iconos/soporte blanco.png" alt="Soporte" class="custom-icon">
+                        Soporte
+                    </a>
+                    <a href="misTickets.html" class="nav-link active" data-nav="dashboard">
+                        <img width="30" height="30" src="Iconos/barras.png" alt="Dashboard" class="custom-icon">
+                        Dashboard
+                    </a>
+                    <a href="#" class="nav-link" title="Próximamente">
+                        <img width="30" height="30" src="Iconos/ajustes.png" alt="Ajustes" class="custom-icon">
+                        Ajustes
+                    </a>
+                </nav>
+            </div>
+            <div class="sidebar-footer">
+                <div class="user-profile">
+                    <div class="user-avatar-container">
+                        <img src="Iconos/usuariGris.png" alt="Usuario" class="user-avatar-icon">
+                    </div>
+                    <span class="user-name" id="sidebar-user-name">Usuario</span>
+                </div>
+            </div>
+        </aside>
+
+        <main class="content">
+            <div class="home-container">
+                <section class="welcome-banner">
+                    <div>
+                        <h1>Mis tickets</h1>
+                        <p>Estado de tus solicitudes, visitas agendadas y actas de servicio.</p>
+                    </div>
+                    <a href="VenSolicitud.html" class="btn-primary-action">Nueva solicitud</a>
+                </section>
+
+                <p id="tickets-aviso" class="aviso" hidden></p>
+
+                <div class="dos-columnas">
+                    <section class="panel">
+                        <h2>Solicitudes</h2>
+                        <div class="tabla-wrap">
+                            <table class="tabla">
+                                <thead>
+                                    <tr><th>#</th><th>Problema</th><th>Prioridad</th><th>Estado</th><th>Creado</th></tr>
+                                </thead>
+                                <tbody id="tabla-tickets">
+                                    <tr><td colspan="5" class="vacio">Cargando...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </section>
+
+                    <section class="panel" id="panel-detalle">
+                        <h2>Detalle</h2>
+                        <p class="card-description" id="detalle-vacio">Selecciona un ticket para ver su historial.</p>
+                        <div id="detalle-contenido" hidden></div>
+                    </section>
+                </div>
+            </div>
+        </main>
+    </div>
+    <script src="app.js"></script>
+    <script src="misTicketsApp.js"></script>
+</body>
+</html>

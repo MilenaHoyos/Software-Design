@@ -1,0 +1,735 @@
+{
+  "name": "03 — Escalamiento, agenda y asignación técnica",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "soporte/logistica",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "name": "Webhook logística",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        400
+      ],
+      "webhookId": "75819567-a6f7-5cf4-b09f-0adf98fc108e",
+      "id": "e9e45401-5fc5-58b8-b0d8-aea747da905a"
+    },
+    {
+      "parameters": {
+        "jsCode": "const ADMIN_EMAIL = 'milenahoyossss@gmail.com'; // recibe los avisos de casos escalados o sin cupo\nconst b = $json.body ?? $json;\nconst txt = (v, max) => String(v ?? '').trim().slice(0, max);\nconst d = {\n  session_token: txt(b.session_token, 200),\n  ticket_id: Number.parseInt(b.ticket_id, 10) || 0,\n  direccion: txt(b.direccion, 300),\n  telefono: txt(b.telefono ?? b.phone, 30),\n  cuadrante: txt(b.cuadrante, 12),\n  admin_email: ADMIN_EMAIL,\n};\nlet error = '';\nif (!d.ticket_id) error = 'Falta el número de ticket.';\nelse if (d.direccion.length < 5) error = 'Escribe la dirección completa de la visita.';\nreturn [{ json: { ...d, error } }];\n"
+      },
+      "name": "Validar solicitud de escalamiento",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        400
+      ],
+      "id": "d68d7299-a90e-555e-89bb-478683f50e1b"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH ses AS (\n  SELECT u.id AS usuario_id, u.nombre_completo AS usuario_nombre, u.correo AS usuario_correo, u.rol\n    FROM public.sesiones_usuario s\n    JOIN public.usuarios u ON u.id = s.usuario_id AND u.activo\n   WHERE s.token_hash = encode(digest($1::text, 'sha256'), 'hex')\n     AND s.revocado_en IS NULL AND s.expira_en > now()\n   LIMIT 1\n)\nSELECT ses.usuario_id, ses.rol,\n       t.id AS ticket_id, t.nombre_completo, t.correo, t.telefono AS telefono_ticket, t.descripcion_problema,\n       t.tipo_dispositivo, t.estado, t.intentos_ia, t.es_dano_fisico, t.fecha_visita,\n       t.prioridad, t.puntaje_prioridad, t.motivo_prioridad,\n       COALESCE((SELECT string_agg(h.mensaje, E'\\n' ORDER BY h.fecha_mensaje)\n                   FROM (SELECT mensaje, fecha_mensaje FROM public.historial_chat\n                          WHERE ticket_id = t.id AND emisor = 'usuario'\n                          ORDER BY fecha_mensaje DESC LIMIT 8) h), '') AS historial_usuario,\n       COALESCE((SELECT jsonb_agg(jsonb_build_object('nombre', z.nombre, 'palabras', z.palabras_clave) ORDER BY z.id)\n                   FROM public.zonas z WHERE z.activo), '[]'::jsonb) AS zonas\n  FROM (SELECT 1) seed\n  LEFT JOIN ses ON true\n  LEFT JOIN public.tickets_soporte t ON t.id = $2 AND ses.usuario_id IS NOT NULL AND (t.usuario_id = ses.usuario_id OR lower(t.correo) = lower(ses.usuario_correo) OR ses.rol = 'admin');",
+        "options": {
+          "queryReplacement": "={{ [$json.session_token, $json.ticket_id] }}"
+        }
+      },
+      "name": "Validar sesión y cargar ticket",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        440,
+        400
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "9Gs2DA8EZ8914KDZ",
+          "name": "Postgres account"
+        }
+      },
+      "id": "d831faf3-6e7a-5e43-81d5-a41e849986d3"
+    },
+    {
+      "parameters": {
+        "jsCode": "const req = $('Validar solicitud de escalamiento').first().json;\nconst t = $input.first().json;\nconst responder = (respuesta) => [{ json: { route: 'responder', respuesta: { ticket_id: req.ticket_id, ...respuesta } } }];\nconst fmt = (f) => new Date(f).toLocaleString('es-CO', { timeZone: 'America/Bogota', dateStyle: 'full', timeStyle: 'short' });\n\nif (req.error) return responder({ success: false, status: 'invalid', message: req.error });\nif (!t.usuario_id) return responder({ success: false, status: 'unauthorized', message: 'Tu sesión expiró. Inicia sesión nuevamente.' });\nif (!t.ticket_id) return responder({ success: false, status: 'not_found', message: 'No encontramos ese ticket en tu cuenta.' });\nif (t.estado === 'Agendado' && t.fecha_visita)\n  return responder({ success: true, status: 'appointment_scheduled', message: `Tu visita ya está agendada para ${fmt(t.fecha_visita)}.` });\nif (['Escalado nivel 2', 'Pendiente de asignación'].includes(t.estado))\n  return responder({ success: true, status: 'escalated', message: 'Tu caso ya está en la cola del equipo técnico. Te contactaremos por correo.' });\nif (!['Escalamiento pendiente', 'En diagnóstico', 'Pendiente'].includes(t.estado))\n  return responder({ success: false, status: 'closed', message: `Este ticket está en estado \"${t.estado}\" y no se puede escalar.` });\n\nconst norm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();\n// Solo se analiza lo que escribió el cliente (no las respuestas de la IA, que mencionan \"humo\" como advertencia).\nconst s = norm(`${t.descripcion_problema} ${t.historial_usuario}`);\nconst peligro = /(humo|olor a quemado|quemad[oa]|bateria (hinchada|inflada)|chispa|riesgo electrico|descarga electrica|corto ?circuito)/.test(s);\nconst fisico = t.es_dano_fisico === true || peligro ||\n  /(liquido|derram|se (me )?mojo|mojad[oa]|pantalla (rota|partida|quebrada)|golpe|se (me )?cayo|dano fisico)/.test(s);\n\n// Zona: la que eligió el cliente; si no, se deduce de la dirección con las zonas administradas (tabla zonas).\nconst zonas = (t.zonas || []).map((z) => ({ nombre: z.nombre,\n  palabras: String(z.palabras || '').split(',').map((p) => norm(p).trim()).filter(Boolean) }));\nif (req.cuadrante && !zonas.some((z) => z.nombre === req.cuadrante))\n  return responder({ success: false, status: 'invalid', message: 'Selecciona una zona de atención válida.' });\nlet cuadrante = req.cuadrante;\nif (!cuadrante) {\n  const dir = norm(req.direccion);\n  const escapar = (p) => p.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');\n  cuadrante = (zonas.find((z) => z.palabras.some((p) => new RegExp(`\\\\b${escapar(p)}\\\\b`).test(dir))) || {}).nombre || '';\n}\n// Prioridad: el daño físico la sube (Alta) y el peligro para la persona la vuelve Crítica.\nconst NOMBRES = { 4: 'Crítica', 3: 'Alta', 2: 'Media', 1: 'Baja' };\nconst actual = Number(t.puntaje_prioridad || 2);\nconst minimo = peligro ? 4 : (fisico ? 3 : 0);\nconst puntaje = Math.max(actual, minimo);\nconst prioridad = {\n  prioridad: NOMBRES[puntaje], puntaje_prioridad: puntaje,\n  motivo_prioridad: puntaje > actual ? (peligro ? 'Riesgo físico confirmado al escalar' : 'Daño físico confirmado al escalar')\n                                     : (t.motivo_prioridad || 'Sin cambio'),\n  horas_sla: { 4: 4, 3: 24, 2: 48, 1: 72 }[puntaje],\n  // Antelación mínima para la visita: los casos urgentes toman los cupos más cercanos\n  horas_min: { 4: 1, 3: 2, 2: 24, 1: 48 }[puntaje],\n};\nreturn [{ json: {\n  ...t, ...req, ...prioridad, cuadrante,\n  route: fisico ? 'visita' : 'nivel2',\n  tipo_dano: fisico ? 'Hardware' : 'Software',\n  impacto: peligro ? 'Alto' : (fisico ? 'Medio' : 'Bajo'),\n  es_dano_fisico: fisico,\n} }];\n"
+      },
+      "name": "Clasificar riesgo y cuadrante",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        400
+      ],
+      "id": "eff3433b-d7cf-5232-aca4-307a173217c3"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "a49ab9a4-9fcc-5e01-893b-1a10bc9d3b57",
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "visita",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "visita"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "29fb822a-e06f-56f5-9dab-b5aff691e6d0",
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "nivel2",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "nivel2"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "ec3eabb4-1088-5a98-b889-662955c7b749",
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "responder",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "responder"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "¿Visita física o nivel 2?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        880,
+        400
+      ],
+      "id": "fedb948c-b335-5657-babe-ec111b0fb558"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH upd AS (\n  UPDATE public.tickets_soporte SET direccion = $2, telefono = COALESCE(NULLIF($3, ''), telefono)\n   WHERE id = $1\n  RETURNING id\n), dias AS (\n  SELECT d::date AS dia\n    FROM generate_series((now() AT TIME ZONE 'America/Bogota')::date,\n                         (now() AT TIME ZONE 'America/Bogota')::date + 14, interval '1 day') AS d\n), slots AS (\n  SELECT te.id AS tecnico_id, te.nombre AS tecnico_nombre, te.correo AS tecnico_correo, te.cuadrante,\n         ((dias.dia + make_interval(hours => h)) AT TIME ZONE 'America/Bogota') AS inicio\n    FROM public.tecnicos te\n    JOIN public.zonas z ON z.nombre = te.cuadrante AND z.activo\n   CROSS JOIN dias\n   CROSS JOIN LATERAL generate_series(te.hora_inicio::int, te.hora_fin::int - 1) AS h\n   WHERE te.activo\n     AND extract(isodow FROM dias.dia)::smallint = ANY (te.dias_laborales)\n     AND NOT EXISTS (SELECT 1 FROM public.ausencias_tecnicos a\n                      WHERE a.tecnico_id = te.id AND dias.dia BETWEEN a.desde AND a.hasta)\n     AND NOT EXISTS (SELECT 1 FROM public.citas c\n                      WHERE c.tecnico_id = te.id AND c.estado = 'Agendada'\n                        AND c.fecha_inicio < ((dias.dia + make_interval(hours => h)) AT TIME ZONE 'America/Bogota') + interval '60 minutes'\n                        AND c.fecha_inicio + make_interval(mins => c.duracion_min) > ((dias.dia + make_interval(hours => h)) AT TIME ZONE 'America/Bogota'))\n), cand AS (\n  SELECT s.tecnico_id, s.tecnico_nombre, s.tecnico_correo, s.inicio\n    FROM slots s\n   WHERE s.cuadrante = $4 AND s.inicio > now() + make_interval(hours => $5)\n   ORDER BY s.inicio,\n            (SELECT count(*) FROM public.citas c2 WHERE c2.tecnico_id = s.tecnico_id AND c2.estado = 'Agendada'),\n            s.tecnico_id\n   LIMIT 1\n)\nSELECT cand.*, (SELECT count(*) FROM upd) AS datos_guardados FROM (SELECT 1) seed LEFT JOIN cand ON true;",
+        "options": {
+          "queryReplacement": "={{ [$json.ticket_id, $json.direccion, $json.telefono, $json.cuadrante, $json.horas_min] }}"
+        }
+      },
+      "name": "Guardar datos y buscar primer cupo",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1120,
+        160
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "9Gs2DA8EZ8914KDZ",
+          "name": "Postgres account"
+        }
+      },
+      "id": "08a28512-ba2b-51d8-8662-eda1fd90ab6b"
+    },
+    {
+      "parameters": {
+        "jsCode": "const base = $('Clasificar riesgo y cuadrante').first().json;\nconst s = $input.first().json;\nif (!base.cuadrante) return [{ json: { ...base, agendado: false, razon: 'No se identificó la zona de la dirección' } }];\nif (!s.tecnico_id) return [{ json: { ...base, agendado: false, razon: `Sin técnicos disponibles en la zona ${base.cuadrante} en los próximos 14 días` } }];\nreturn [{ json: { ...base, tecnico_id: s.tecnico_id, tecnico_nombre: s.tecnico_nombre, tecnico_correo: s.tecnico_correo,\n  inicio: new Date(s.inicio).toISOString(), agendado: true } }];\n"
+      },
+      "name": "Preparar decisión de agenda",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1340,
+        160
+      ],
+      "id": "9fb58408-f79b-52b4-9a8e-1452b4d94012"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "582be765-b88e-58c4-bf30-b4e5c337a1bb",
+              "leftValue": "={{ $json.agendado === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "name": "¿Existe cupo asignable?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1560,
+        160
+      ],
+      "id": "1e8ff764-9b40-540a-9e00-4d3f5543a67a"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH cita AS (\n  INSERT INTO public.citas (ticket_id, tecnico_id, fecha_inicio, duracion_min, cuadrante, estado)\n  SELECT $1, $2, $3::timestamptz, 60, $4, 'Agendada'\n   WHERE NOT EXISTS (SELECT 1 FROM public.citas c\n                      WHERE c.tecnico_id = $2 AND c.estado = 'Agendada'\n                        AND c.fecha_inicio < $3::timestamptz + interval '60 minutes'\n                        AND c.fecha_inicio + make_interval(mins => c.duracion_min) > $3::timestamptz)\n  ON CONFLICT DO NOTHING\n  RETURNING id, ticket_id, tecnico_id, fecha_inicio, cuadrante\n), upd AS (\n  UPDATE public.tickets_soporte t\n     SET tecnico_asignado_id = c.tecnico_id, fecha_visita = c.fecha_inicio, estado = 'Agendado',\n         categoria = $5, nivel_impacto = $6, es_dano_fisico = true,\n         prioridad = $8, puntaje_prioridad = $9, motivo_prioridad = $10,\n         fecha_limite_atencion = LEAST(COALESCE(t.fecha_limite_atencion, 'infinity'), now() + make_interval(hours => $11))\n    FROM cita c WHERE t.id = c.ticket_id\n  RETURNING t.id AS ticket_id, t.nombre_completo, t.correo, t.direccion, t.telefono, t.descripcion_problema,\n            t.estado, t.fecha_visita, c.id AS cita_id, c.cuadrante\n), audit AS (\n  INSERT INTO public.auditoria_tickets (ticket_id, actor, accion, estado_anterior, estado_nuevo, detalle)\n  SELECT ticket_id, 'n8n', 'cita_agendada', $7, 'Agendado',\n         jsonb_build_object('cita_id', cita_id, 'tecnico_id', $2, 'fecha_visita', fecha_visita, 'cuadrante', cuadrante)\n    FROM upd\n)\nSELECT upd.* FROM (SELECT 1) seed LEFT JOIN upd ON true;",
+        "options": {
+          "queryReplacement": "={{ [$json.ticket_id, $json.tecnico_id, $json.inicio, $json.cuadrante, $json.tipo_dano, $json.impacto, $json.estado, $json.prioridad, $json.puntaje_prioridad, $json.motivo_prioridad, $json.horas_sla] }}"
+        }
+      },
+      "name": "Crear cita y asignar técnico",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1800,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "9Gs2DA8EZ8914KDZ",
+          "name": "Postgres account"
+        }
+      },
+      "id": "39c83561-547c-5e7f-88c4-b4826f35a500"
+    },
+    {
+      "parameters": {
+        "jsCode": "const x = $input.first().json;\nconst d = $('Preparar decisión de agenda').first().json;\nif (!x.ticket_id) {\n  return [{ json: { enviar: false, respuesta: { success: false, status: 'retry', ticket_id: d.ticket_id,\n    message: 'Ese horario acaba de ocuparse. Envía el formulario de nuevo para buscar otro cupo.' } } }];\n}\nconst fecha_local = new Date(x.fecha_visita).toLocaleString('es-CO', { timeZone: 'America/Bogota', dateStyle: 'full', timeStyle: 'short' });\nreturn [{ json: { ...x, fecha_local, tecnico_nombre: d.tecnico_nombre, tecnico_correo: d.tecnico_correo, enviar: true,\n  respuesta: { success: true, status: 'appointment_scheduled', ticket_id: x.ticket_id, fecha_visita: x.fecha_visita,\n    tecnico_nombre: d.tecnico_nombre, cuadrante: x.cuadrante,\n    message: `Visita técnica agendada para ${fecha_local} (hora Colombia) con ${d.tecnico_nombre}. Te enviamos la confirmación por correo.` } } }];\n"
+      },
+      "name": "Preparar confirmación de cita",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2020,
+        0
+      ],
+      "id": "95656473-e051-5107-9331-c5f93346217b"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "dd48acde-ac70-5986-a706-fb34ad39904e",
+              "leftValue": "={{ $json.enviar === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "name": "¿Cita creada?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2460,
+        0
+      ],
+      "id": "10964294-653b-556a-952b-adb1daeec9ff"
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.correo }}",
+        "subject": "=Visita técnica agendada — Ticket #{{ $json.ticket_id }}",
+        "emailType": "html",
+        "message": "=<div style=\"font-family:Arial,sans-serif;font-size:14px;color:#172b4d\">Hola {{ $json.nombre_completo }},<br><br>Tu caso requiere revisión presencial.<br><b>Ticket:</b> #{{ $json.ticket_id }}<br><b>Fecha:</b> {{ $json.fecha_local }} (hora Colombia)<br><b>Técnico:</b> {{ $json.tecnico_nombre }}<br><b>Dirección:</b> {{ $json.direccion }}<br><br>Si necesitas cambiar la cita, responde a este correo indicando el número de ticket.<br><br>Equipo de Soporte Técnico</div>",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "name": "Notificar cita al cliente",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        2680,
+        -100
+      ],
+      "webhookId": "93e25054-8b8d-5f0f-9da2-cca23ed0cfec",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "RRhqAKrSTV5WDEoW",
+          "name": "Gmail account"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "id": "d4838f54-beab-513d-8955-847c0553da48"
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.tecnico_correo }}",
+        "subject": "=Nueva visita asignada — Ticket #{{ $json.ticket_id }}",
+        "emailType": "html",
+        "message": "=<div style=\"font-family:Arial,sans-serif;font-size:14px;color:#172b4d\">Se te asignó una visita.<br><b>Ticket:</b> #{{ $json.ticket_id }}<br><b>Fecha:</b> {{ $json.fecha_local }}<br><b>Cliente:</b> {{ $json.nombre_completo }} — {{ $json.telefono }}<br><b>Dirección:</b> {{ $json.direccion }}<br><b>Problema:</b> {{ $json.descripcion_problema }}<br><br>Equipo de Soporte Técnico</div>",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "name": "Notificar cita al técnico",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        2680,
+        100
+      ],
+      "webhookId": "50a1ebf7-e9bf-500f-bb2f-d7e2ecf0acf6",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "RRhqAKrSTV5WDEoW",
+          "name": "Gmail account"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "id": "dec8641e-428a-59e1-acfd-f756543fc1ea"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json.respuesta }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "name": "Responder cita agendada",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        2240,
+        0
+      ],
+      "id": "8da498dc-ce37-5976-b858-acac4e8168e2"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH u AS (\n  UPDATE public.tickets_soporte\n     SET estado = 'Pendiente de asignación', categoria = $2, nivel_impacto = $3, es_dano_fisico = true,\n         prioridad = $7, puntaje_prioridad = $8, motivo_prioridad = $9,\n         fecha_limite_atencion = LEAST(COALESCE(fecha_limite_atencion, 'infinity'), now() + make_interval(hours => $10))\n   WHERE id = $1\n  RETURNING id AS ticket_id, nombre_completo, correo, telefono, direccion, descripcion_problema, estado\n), a AS (\n  INSERT INTO public.auditoria_tickets (ticket_id, actor, accion, estado_anterior, estado_nuevo, detalle)\n  SELECT ticket_id, 'n8n', 'sin_cupo', $5, 'Pendiente de asignación', jsonb_build_object('motivo', $4::text) FROM u\n)\nSELECT u.*, $4::text AS razon, $6::text AS admin_email FROM (SELECT 1) seed LEFT JOIN u ON true;",
+        "options": {
+          "queryReplacement": "={{ [$json.ticket_id, $json.tipo_dano, $json.impacto, $json.razon, $json.estado, $json.admin_email, $json.prioridad, $json.puntaje_prioridad, $json.motivo_prioridad, $json.horas_sla] }}"
+        }
+      },
+      "name": "Dejar pendiente por falta de cupo",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1800,
+        280
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "9Gs2DA8EZ8914KDZ",
+          "name": "Postgres account"
+        }
+      },
+      "id": "467fc89c-be6b-5f96-9b12-1f43c339015f"
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.admin_email }}",
+        "subject": "=Asignación manual requerida — Ticket #{{ $json.ticket_id }}",
+        "emailType": "html",
+        "message": "=<div style=\"font-family:Arial,sans-serif;font-size:14px;color:#172b4d\">Se requiere asignación manual de una visita.<br><b>Ticket:</b> #{{ $json.ticket_id }}<br><b>Cliente:</b> {{ $json.nombre_completo }} — {{ $json.telefono }}<br><b>Dirección:</b> {{ $json.direccion }}<br><b>Motivo:</b> {{ $json.razon }}<br><b>Problema:</b> {{ $json.descripcion_problema }}<br><br>Asígnalo desde el Dashboard de la plataforma.<br><br>Equipo de Soporte Técnico</div>",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "name": "Avisar caso pendiente a administración",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        2240,
+        280
+      ],
+      "webhookId": "71933721-9e70-508e-8768-463a8f1e82e2",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "RRhqAKrSTV5WDEoW",
+          "name": "Gmail account"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "id": "7308aaf3-b120-5241-a0f6-f1948103d529"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, status: 'pending_assignment', ticket_id: $json.ticket_id, estado: 'Pendiente de asignación', message: 'Tu caso quedó en cola para asignación de un técnico. Te contactaremos para coordinar la visita.' } }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "name": "Responder pendiente de asignación",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        2020,
+        280
+      ],
+      "id": "ba03acd5-0a52-5af1-86b2-8b14cec080c2"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH u AS (\n  UPDATE public.tickets_soporte\n     SET estado = 'Escalado nivel 2', categoria = 'Software', nivel_impacto = $2, es_dano_fisico = false,\n         direccion = $4, telefono = COALESCE(NULLIF($5, ''), telefono),\n         prioridad = $7, puntaje_prioridad = $8, motivo_prioridad = $9,\n         fecha_limite_atencion = LEAST(COALESCE(fecha_limite_atencion, 'infinity'), now() + make_interval(hours => $10))\n   WHERE id = $1 AND estado IN ('Escalamiento pendiente', 'En diagnóstico', 'Pendiente')\n  RETURNING id AS ticket_id, nombre_completo, correo, telefono, direccion, descripcion_problema, estado, intentos_ia\n), a AS (\n  INSERT INTO public.auditoria_tickets (ticket_id, actor, accion, estado_anterior, estado_nuevo, detalle)\n  SELECT ticket_id, 'n8n', 'escalamiento_nivel_2', $3, 'Escalado nivel 2', '{}'::jsonb FROM u\n)\nSELECT u.*, $6::text AS admin_email FROM (SELECT 1) seed LEFT JOIN u ON true;",
+        "options": {
+          "queryReplacement": "={{ [$json.ticket_id, $json.impacto, $json.estado, $json.direccion, $json.telefono, $json.admin_email, $json.prioridad, $json.puntaje_prioridad, $json.motivo_prioridad, $json.horas_sla] }}"
+        }
+      },
+      "name": "Escalar caso de software a nivel 2",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1120,
+        560
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "9Gs2DA8EZ8914KDZ",
+          "name": "Postgres account"
+        }
+      },
+      "id": "aa8be242-51d5-5b2b-b24d-47b9b34f2f36"
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.admin_email }}",
+        "subject": "=Caso de software escalado — Ticket #{{ $json.ticket_id }}",
+        "emailType": "html",
+        "message": "=<div style=\"font-family:Arial,sans-serif;font-size:14px;color:#172b4d\">El caso requiere soporte de nivel 2.<br><b>Ticket:</b> #{{ $json.ticket_id }}<br><b>Cliente:</b> {{ $json.nombre_completo }}<br><b>Correo:</b> {{ $json.correo }}<br><b>Teléfono:</b> {{ $json.telefono }}<br><b>Intentos con IA:</b> {{ $json.intentos_ia }}<br><b>Problema:</b> {{ $json.descripcion_problema }}<br><br>Asígnalo desde el Dashboard de la plataforma.<br><br>Equipo de Soporte Técnico</div>",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "name": "Notificar escalamiento a administración",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1560,
+        560
+      ],
+      "webhookId": "802c7473-e812-525b-8bf3-39ec6de64c8e",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "RRhqAKrSTV5WDEoW",
+          "name": "Gmail account"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "id": "ce193bc0-4e39-5794-b50d-cc2fa96437d6"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, status: 'escalated_level_2', ticket_id: $json.ticket_id, estado: 'Escalado nivel 2', message: 'Tu caso fue remitido al equipo de soporte de nivel 2. Te contactaremos por correo o teléfono.' } }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "name": "Responder escalamiento nivel 2",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1340,
+        560
+      ],
+      "id": "5b765ab0-d33d-595b-96ca-279bf06b76c2"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json.respuesta }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "name": "Responder sin procesar",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1120,
+        800
+      ],
+      "id": "409aa982-ab95-545c-86b3-147c6db7b2cf"
+    }
+  ],
+  "connections": {
+    "Webhook logística": {
+      "main": [
+        [
+          {
+            "node": "Validar solicitud de escalamiento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar solicitud de escalamiento": {
+      "main": [
+        [
+          {
+            "node": "Validar sesión y cargar ticket",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar sesión y cargar ticket": {
+      "main": [
+        [
+          {
+            "node": "Clasificar riesgo y cuadrante",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clasificar riesgo y cuadrante": {
+      "main": [
+        [
+          {
+            "node": "¿Visita física o nivel 2?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Visita física o nivel 2?": {
+      "main": [
+        [
+          {
+            "node": "Guardar datos y buscar primer cupo",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Escalar caso de software a nivel 2",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder sin procesar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guardar datos y buscar primer cupo": {
+      "main": [
+        [
+          {
+            "node": "Preparar decisión de agenda",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar decisión de agenda": {
+      "main": [
+        [
+          {
+            "node": "¿Existe cupo asignable?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Existe cupo asignable?": {
+      "main": [
+        [
+          {
+            "node": "Crear cita y asignar técnico",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Dejar pendiente por falta de cupo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Crear cita y asignar técnico": {
+      "main": [
+        [
+          {
+            "node": "Preparar confirmación de cita",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar confirmación de cita": {
+      "main": [
+        [
+          {
+            "node": "Responder cita agendada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Responder cita agendada": {
+      "main": [
+        [
+          {
+            "node": "¿Cita creada?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Cita creada?": {
+      "main": [
+        [
+          {
+            "node": "Notificar cita al cliente",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Notificar cita al técnico",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dejar pendiente por falta de cupo": {
+      "main": [
+        [
+          {
+            "node": "Responder pendiente de asignación",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Responder pendiente de asignación": {
+      "main": [
+        [
+          {
+            "node": "Avisar caso pendiente a administración",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Escalar caso de software a nivel 2": {
+      "main": [
+        [
+          {
+            "node": "Responder escalamiento nivel 2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Responder escalamiento nivel 2": {
+      "main": [
+        [
+          {
+            "node": "Notificar escalamiento a administración",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "id": "stLogistica03v2a",
+  "tags": []
+}

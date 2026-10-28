@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mis visitas - Plataforma Inteligente de Soporte Técnico</title>
+    <link rel="stylesheet" href="homedisenio.css">
+    <link rel="stylesheet" href="portal.css">
+</head>
+<body>
+    <div class="main-layout">
+        <aside class="sidebar">
+            <div class="sidebar-top">
+                <nav class="nav-menu">
+                    <div class="nav-indicator"></div>
+                    <a href="tecnicoVentana.html" class="nav-link" data-nav="inicio">
+                        <img width="30" height="30" src="Iconos/HomeNegro.png" alt="Inicio" class="custom-icon">
+                        Inicio
+                    </a>
+                    <a href="VenSolicitud.html" class="nav-link" data-nav="soporte">
+                        <img width="30" height="30" src="Iconos/soporte blanco.png" alt="Soporte" class="custom-icon">
+                        Soporte
+                    </a>
+                    <a href="tecnicoVentana.html" class="nav-link active" data-nav="dashboard">
+                        <img width="30" height="30" src="Iconos/barras.png" alt="Dashboard" class="custom-icon">
+                        Dashboard
+                    </a>
+                    <a href="#" class="nav-link" title="Próximamente">
+                        <img width="30" height="30" src="Iconos/ajustes.png" alt="Ajustes" class="custom-icon">
+                        Ajustes
+                    </a>
+                </nav>
+            </div>
+            <div class="sidebar-footer">
+                <div class="user-profile">
+                    <div class="user-avatar-container">
+                        <img src="Iconos/usuariGris.png" alt="Usuario" class="user-avatar-icon">
+                    </div>
+                    <span class="user-name" id="sidebar-user-name">Usuario</span>
+                </div>
+            </div>
+        </aside>
+
+        <main class="content">
+            <div class="home-container">
+                <section class="welcome-banner">
+                    <div>
+                        <h1>Hola, <span id="tec-nombre">técnico</span> 🛠️</h1>
+                        <p>Registra tu llegada, el resultado de cada visita y la plataforma genera el acta PDF y avisa al cliente.</p>
+                    </div>
+                    <button type="button" class="btn-primary-action" id="btn-recargar">Actualizar</button>
+                </section>
+
+                <p id="tec-aviso" class="aviso" hidden></p>
+
+                <div class="pestanas" role="tablist">
+                    <button type="button" role="tab" aria-selected="true" data-pestana="visitas">Visitas pendientes</button>
+                    <button type="button" role="tab" aria-selected="false" data-pestana="agenda">Mi agenda</button>
+                </div>
+
+                <div id="pestana-visitas" class="dos-columnas">
+                    <section class="panel">
+                        <h2>Visitas pendientes</h2>
+                        <div class="tabla-wrap">
+                            <table class="tabla">
+                                <thead>
+                                    <tr><th>#</th><th>Visita</th><th>Prioridad</th><th>Cliente</th><th>Dirección</th><th>Estado</th></tr>
+                                </thead>
+                                <tbody id="tabla-cola">
+                                    <tr><td colspan="6" class="vacio">Cargando...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </section>
+
+                    <section class="panel">
+                        <h2>Detalle de la visita</h2>
+                        <p class="card-description" id="detalle-vacio">Selecciona una visita.</p>
+                        <div id="detalle-contenido" hidden></div>
+
+                        <button type="button" class="btn" id="btn-llegada" hidden>Registrar llegada (iniciar visita)</button>
+
+                        <form id="form-resultado" class="formulario-columna" hidden>
+                            <h3>Resultado de la visita</h3>
+                            <label>Diagnóstico
+                                <textarea id="res-diagnostico" class="campo" rows="2" minlength="5" required placeholder="Ej: Teclado sulfatado por derrame de café."></textarea>
+                            </label>
+                            <label>Trabajo realizado
+                                <textarea id="res-trabajo" class="campo" rows="2" minlength="5" required placeholder="Ej: Limpieza de placa y cambio de teclado."></textarea>
+                            </label>
+                            <label>Repuestos y materiales (opcional)
+                                <input type="text" id="res-repuestos" class="campo" maxlength="1000" placeholder="Ej: Teclado Lenovo IdeaPad 3">
+                            </label>
+                            <label>Resultado
+                                <select id="res-resultado" class="campo" required>
+                                    <option value="Resuelto">Resuelto</option>
+                                    <option value="Requiere nueva visita">Requiere nueva visita</option>
+                                    <option value="No resuelto">No resuelto</option>
+                                </select>
+                            </label>
+                            <label>Observaciones (opcional)
+                                <textarea id="res-observaciones" class="campo" rows="2" maxlength="2000"></textarea>
+                            </label>
+                            <button type="submit" class="btn" id="btn-resultado">Registrar resultado y generar acta</button>
+                        </form>
+                    </section>
+                </div>
+
+                <section id="pestana-agenda" class="panel" hidden>
+                    <div class="agenda-barra">
+                        <strong id="agenda-titulo">Semana</strong>
+                        <button type="button" class="btn btn-secundario" id="agenda-anterior">◀ Anterior</button>
+                        <button type="button" class="btn btn-secundario" id="agenda-hoy">Esta semana</button>
+                        <button type="button" class="btn btn-secundario" id="agenda-siguiente">Siguiente ▶</button>
+                    </div>
+                    <div id="agenda" class="agenda-semana"></div>
+                </section>
+            </div>
+        </main>
+    </div>
+    <script src="app.js"></script>
+    <script src="agenda.js"></script>
+    <script src="tecnicoApp.js"></script>
+</body>
+</html>

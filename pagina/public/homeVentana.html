@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inicio - Plataforma Inteligente de Soporte Técnico</title>
+    <link rel="stylesheet" href="homedisenio.css">
+    <link rel="stylesheet" href="portal.css">
+</head>
+<body>
+    <div class="main-layout">
+        <!-- Barra Lateral de Navegación -->
+        <aside class="sidebar">
+            <div class="sidebar-top">
+                <nav class="nav-menu">
+                    <div class="nav-indicator"></div>
+                    <a href="homeVentana.html" class="nav-link active" data-nav="inicio">
+                        <img width="30" height="30" src="Iconos/HomeNegro.png" alt="Inicio" class="custom-icon">
+                        Inicio
+                    </a>
+                    <a href="VenSolicitud.html" class="nav-link" data-nav="soporte">
+                        <img width="30" height="30" src="Iconos/soporte blanco.png" alt="Soporte" class="custom-icon">
+                        Soporte
+                    </a>
+                    <a href="misTickets.html" class="nav-link" data-nav="dashboard">
+                        <img width="30" height="30" src="Iconos/barras.png" alt="Dashboard" class="custom-icon">
+                        Dashboard
+                    </a>
+                    <a href="#" class="nav-link" title="Próximamente">
+                        <img width="30" height="30" src="Iconos/ajustes.png" alt="Ajustes" class="custom-icon">
+                        Ajustes
+                    </a>
+                </nav>
+            </div>
+            
+            <!-- Perfil de usuario en la parte inferior de la barra lateral -->
+            <div class="sidebar-footer">
+                <div class="user-profile">
+                    <div class="user-avatar-container">
+                        <img src="Iconos/usuariGris.png" alt="Usuario" class="user-avatar-icon">
+                    </div>
+                    <span class="user-name" id="sidebar-user-name">Cargando...</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Contenido Principal / Vista de Home -->
+        <main class="content">
+            <div class="home-container">
+                
+                <!-- Banner de Saludo -->
+                <section class="welcome-banner">
+                    <div>
+                        <span class="eyebrow">⚙ Soporte inteligente</span>
+                        <h1>¡Hola de nuevo, <span class="resaltado" id="home-user-name">Usuario</span>! 👋</h1>
+                        <p>Reparación experta para tus equipos, con atención personalizada en cada paso.</p>
+                    </div>
+                    <a href="chatVen.html?nuevo=1" class="btn-primary-action">
+                        <img width="20" height="20" src="Iconos/soporte blanco.png" alt="Soporte" style="filter: invert(1);">
+                        Iniciar consulta <span aria-hidden="true">→</span>
+                    </a>
+                </section>
+
+                <section class="hero-benefits" aria-label="Beneficios del soporte">
+                    <article class="hero-benefit-card">
+                        <img src="img/iconos/soporte-lineal.svg" alt="">
+                        <span class="benefit-kicker">Asistencia inteligente</span>
+                        <strong>24/7</strong>
+                        <span>Diagnóstico con IA</span>
+                    </article>
+                    <article class="hero-benefit-card">
+                        <img src="img/iconos/tickets-lineal.svg" alt="">
+                        <span class="benefit-kicker">Atención cercana</span>
+                        <strong>En tu zona</strong>
+                        <span>Técnicos expertos</span>
+                    </article>
+                    <article class="hero-benefit-card">
+                        <img src="img/iconos/ajustes-lineal.svg" alt="">
+                        <span class="benefit-kicker">Siempre informado</span>
+                        <strong>En tiempo real</strong>
+                        <span>Seguimiento de tu caso</span>
+                    </article>
+                </section>
+
+                <!-- Tarjetas de Métricas Rápidas -->
+                <section>
+                    <div class="stats-container">
+                        <div class="stat-box">
+                            <div>
+                                <div class="stat-label">Tickets Activos</div>
+                                <div class="stat-number" id="stat-activos">–</div>
+                            </div>
+                            <img width="28" height="28" src="Iconos/barras.png" alt="Métricas" style="opacity: 0.5;">
+                        </div>
+                        <div class="stat-box">
+                            <div>
+                                <div class="stat-label">Casos Resueltos</div>
+                                <div class="stat-number" id="stat-resueltos">–</div>
+                            </div>
+                            <img width="28" height="28" src="Iconos/HomeNegro.png" alt="Historial" style="opacity: 0.5;">
+                        </div>
+                        <div class="stat-box">
+                            <div>
+                                <div class="stat-label">Estado del Sistema</div>
+                                <div class="stat-number" id="stat-sistema" style="color: #10b981; font-size: 16px;">🟢 Operativo</div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Opciones Principales de Acceso -->
+                <section>
+                    <div class="section-title">¿Qué deseas realizar hoy?</div>
+                    <div class="cards-grid">
+                        
+                        <!-- Tarjeta 1: Crear solicitud y hablar con la IA -->
+                        <a href="VenSolicitud.html" class="dashboard-card">
+                            <div class="card-icon-wrapper">
+                                <img width="28" height="28" src="Iconos/soporte blanco.png" alt="Asistente IA" style="filter: brightness(0.2);">
+                            </div>
+                            <h3 class="card-title">Asistente Virtual IA</h3>
+                            <p class="card-description">Diagnostica y resuelve fallas de hardware, software y red de forma inmediata con nuestro agente inteligente.</p>
+                        </a>
+
+                        <!-- Tarjeta 2: Mis Solicitudes / Historial -->
+                        <a href="misTickets.html" class="dashboard-card">
+                            <div class="card-icon-wrapper">
+                                <img width="28" height="28" src="Iconos/barras.png" alt="Tickets" style="filter: brightness(0.2);">
+                            </div>
+                            <h3 class="card-title">Mis Tickets y Casos</h3>
+                            <p class="card-description">Consulta el estado de los tickets que has escalado a técnicos humanos o revisa el historial de soluciones.</p>
+                        </a>
+
+                        <!-- Tarjeta 3: Configuración de Cuenta -->
+                        <a href="#" class="dashboard-card" title="Próximamente">
+                            <div class="card-icon-wrapper">
+                                <img width="28" height="28" src="Iconos/ajustes.png" alt="Ajustes" style="filter: brightness(0.2);">
+                            </div>
+                            <h3 class="card-title">Ajustes de Perfil</h3>
+                            <p class="card-description">Actualiza tu información personal, correo de notificaciones y preferencias de la plataforma.</p>
+                        </a>
+
+                    </div>
+                </section>
+
+            </div>
+        </main>
+    </div>
+    <script src="app.js"></script>
+    <script src="homeApp.js"></script>
+</body>
+</html>

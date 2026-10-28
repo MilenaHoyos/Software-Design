@@ -1,0 +1,470 @@
+{
+  "name": "01 — Recepción y registro de solicitudes",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "soporte/solicitudes",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "name": "Webhook recepción",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "dee676d6-a3cf-51fa-bb1c-95b234365723",
+      "id": "d8fe1947-a0ea-5bbd-a128-e00fbb5fc9d5"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Solo crea tickets. El registro / login / recuperación viven en el flujo 04.\nconst b = $json.body ?? $json;\nconst txt = (v, max) => String(v ?? '').trim().slice(0, max);\nconst d = {\n  session_token: txt(b.session_token, 200),\n  nombre: txt(b.nombre ?? b.nombre_completo ?? b.name, 150),\n  identificacion: txt(b.identificacion ?? b.cedula, 50),\n  telefono: txt(b.telefono ?? b.phone, 30),\n  tipo_dispositivo: txt(b.tipo_dispositivo, 100),\n  descripcion: txt(b.descripcion ?? b.descripcion_problema, 5000),\n  direccion: txt(b.direccion, 300),\n  // 'chat': el caso se inició escribiendo directamente en el chat web\n  canal: b.canal === 'chat' ? 'chat' : 'web',\n};\nlet error = '', status = 'invalid';\nif (!d.session_token) { error = 'Inicia sesión para crear una solicitud.'; status = 'unauthorized'; }\nelse if (d.descripcion.length < 10) error = 'Describe el problema con al menos 10 caracteres.';\nreturn [{ json: { ...d, error, status } }];\n"
+      },
+      "name": "Validar y normalizar solicitud",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ],
+      "id": "6b6a13ec-040f-5502-916a-0ff9c3260436"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH ses AS (\n  SELECT u.id AS usuario_id, u.nombre_completo AS usuario_nombre, u.correo AS usuario_correo, u.rol\n    FROM public.sesiones_usuario s\n    JOIN public.usuarios u ON u.id = s.usuario_id AND u.activo\n   WHERE s.token_hash = encode(digest($1::text, 'sha256'), 'hex')\n     AND s.revocado_en IS NULL AND s.expira_en > now()\n   LIMIT 1\n)\nSELECT ses.*,\n       (SELECT u.identificacion FROM public.usuarios u WHERE u.id = ses.usuario_id) AS usuario_identificacion,\n       (SELECT u.telefono FROM public.usuarios u WHERE u.id = ses.usuario_id) AS usuario_telefono,\n       (SELECT count(*) FROM public.tickets_soporte t\n         WHERE (t.usuario_id = ses.usuario_id OR lower(t.correo) = lower(ses.usuario_correo))\n           AND t.estado NOT IN ('Cerrado', 'Cancelado', 'Resuelto IA')) AS abiertos\n  FROM (SELECT 1) seed LEFT JOIN ses ON true;",
+        "options": {
+          "queryReplacement": "={{ [$json.session_token] }}"
+        }
+      },
+      "name": "Validar sesión del cliente",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        440,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "9Gs2DA8EZ8914KDZ",
+          "name": "Postgres account"
+        }
+      },
+      "id": "d9224e50-9e7e-53c8-9311-c321c3411dc0"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prioridad por reglas: palabras del problema + casos abiertos del cliente.\n// Crítica: riesgo para la persona · Alta: no puede usar el equipo o hay pérdida de datos\n// Media: falla parcial · Baja: consultas y configuraciones.\nconst NOMBRES_PRIORIDAD = { 4: 'Crítica', 3: 'Alta', 2: 'Media', 1: 'Baja' };\nconst HORAS_SLA = { 4: 4, 3: 24, 2: 48, 1: 72 };\nfunction normalizarTexto(s) {\n  return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();\n}\nfunction calcularPrioridad(texto, extra = {}) {\n  const s = normalizarTexto(texto);\n  const reglas = [\n    [4, /(humo|fuego|llama|olor a quemado|quemad[oa]|chispa|bateria (hinchada|inflada)|descarga electrica|corto ?circuito|explot)/],\n    [3, /(no (enciende|prende|arranca|inicia)|pantalla (rota|partida|quebrada|negra)|liquido|derram|mojad[oa]|se (me )?mojo|virus|hacke|ransomware|secuestr|perdi (mis |los |la )?(archivos|informacion|datos)|urgente|no puedo trabajar|se (me )?cayo|golpe)/],\n    [2, /(lent|wifi|internet|\\bred\\b|impresora|no imprime|error|pantallazo|se congela|se reinicia|sonido|audio|teclado|mouse|touchpad|bateria|cargador|no carga|camara|monitor)/],\n  ];\n  let puntaje = 1, motivo = 'Consulta o configuración';\n  for (const [p, re] of reglas) {\n    const m = s.match(re);\n    if (m) { puntaje = p; motivo = `Palabra clave: \"${m[0]}\"`; break; }\n  }\n  if (Number(extra.abiertos || 0) >= 2 && puntaje < 4) { puntaje += 1; motivo += ' + varios casos abiertos'; }\n  if (extra.minimo && extra.minimo > puntaje) { puntaje = extra.minimo; motivo = extra.motivoMinimo || motivo; }\n  return { prioridad: NOMBRES_PRIORIDAD[puntaje], puntaje_prioridad: puntaje, horas_sla: HORAS_SLA[puntaje],\n           motivo_prioridad: motivo.slice(0, 120) };\n}\n\nconst req = $('Validar y normalizar solicitud').first().json;\nconst s = $input.first().json;\nlet ok = !req.error && !!s.usuario_id;\nlet respuesta = null;\nif (req.error) respuesta = { success: false, status: req.status, message: req.error };\nelse if (!s.usuario_id) respuesta = { success: false, status: 'unauthorized', message: 'Tu sesión expiró. Inicia sesión nuevamente.' };\nconst prioridad = calcularPrioridad(`${req.descripcion} ${req.tipo_dispositivo}`, { abiertos: s.abiertos });\nreturn [{ json: { ...req, ...s, ...prioridad, nombre: req.nombre || s.usuario_nombre,\n  identificacion: req.identificacion || s.usuario_identificacion || '',\n  telefono: req.telefono || s.usuario_telefono || '', ok, respuesta } }];\n"
+      },
+      "name": "Decidir y priorizar el ticket",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        0
+      ],
+      "id": "58da6621-afa3-59e6-86e3-b52183c537c0"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "8dfeddbd-7245-5a72-86f0-f6726ece6c90",
+              "leftValue": "={{ $json.ok === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "name": "¿Datos y sesión válidos?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        880,
+        0
+      ],
+      "id": "98de6ddc-b7ec-505b-a040-dc1adc8f4da5"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json.respuesta }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "name": "Responder solicitud rechazada",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1100,
+        160
+      ],
+      "id": "5bafa6a8-4513-5dd5-9553-bcd53afa8d1d"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH t AS (\n  INSERT INTO public.tickets_soporte (usuario_id, nombre_completo, identificacion, correo, telefono,\n                                      tipo_dispositivo, descripcion_problema, direccion, estado, canal_origen, intentos_ia,\n                                      prioridad, puntaje_prioridad, motivo_prioridad, fecha_limite_atencion)\n  VALUES ($1, $2, $3, $4, NULLIF($5, ''), NULLIF($6, ''), $7, NULLIF($8, ''), 'Pendiente', $13, 0,\n          $9, $10, $11, now() + make_interval(hours => $12))\n  RETURNING id, nombre_completo, correo, estado, tipo_dispositivo, descripcion_problema, fecha_creacion,\n            prioridad, fecha_limite_atencion\n), a AS (\n  INSERT INTO public.auditoria_tickets (ticket_id, actor, accion, estado_nuevo, detalle)\n  SELECT id, 'cliente:' || $1, 'ticket_creado', estado,\n         jsonb_build_object('canal', $13::text, 'prioridad', prioridad, 'motivo_prioridad', $11::text) FROM t\n)\nSELECT id AS ticket_id, nombre_completo, correo, estado, tipo_dispositivo, descripcion_problema, fecha_creacion,\n       prioridad, fecha_limite_atencion FROM t;",
+        "options": {
+          "queryReplacement": "={{ [$json.usuario_id, $json.nombre, $json.identificacion, $json.usuario_correo, $json.telefono, $json.tipo_dispositivo, $json.descripcion, $json.direccion, $json.prioridad, $json.puntaje_prioridad, $json.motivo_prioridad, $json.horas_sla, $json.canal] }}"
+        }
+      },
+      "name": "Crear ticket",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1100,
+        -80
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "9Gs2DA8EZ8914KDZ",
+          "name": "Postgres account"
+        }
+      },
+      "id": "511ea969-f341-5ff2-8219-7d608cdc1d01"
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.correo }}",
+        "subject": "=Solicitud recibida — Ticket #{{ $json.ticket_id }}",
+        "emailType": "html",
+        "message": "=<div style=\"font-family:Arial,sans-serif;font-size:14px;color:#172b4d\">Hola {{ $json.nombre_completo }},<br><br>Recibimos tu solicitud de soporte técnico.<br><b>Ticket:</b> #{{ $json.ticket_id }}<br><b>Dispositivo:</b> {{ $json.tipo_dispositivo || 'No especificado' }}<br><b>Prioridad asignada:</b> {{ $json.prioridad }}<br><br>Puedes seguir el caso en <a href=\"http://localhost:3000/misTickets.html\">Mis tickets</a>.<br><br>Equipo de Soporte Técnico</div>",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "name": "Enviar confirmación al cliente",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1540,
+        -80
+      ],
+      "webhookId": "cc751355-378d-56f8-b72f-3dcfa3bbfc14",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "RRhqAKrSTV5WDEoW",
+          "name": "Gmail account"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "id": "cbe8e080-6982-52c3-a520-0a3d5972e7bf"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, status: 'success', ticket_id: $json.ticket_id, estado: $json.estado, descripcion_problema: $json.descripcion_problema, prioridad: $json.prioridad, fecha_limite_atencion: $json.fecha_limite_atencion, message: 'Tu solicitud fue registrada con el ticket #' + $json.ticket_id + '.' } }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "name": "Responder al portal",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1320,
+        -80
+      ],
+      "id": "8accef89-e5f7-5e22-ad9d-8fa2f910a82f"
+    },
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "simple": true,
+        "filters": {
+          "q": "in:inbox is:unread -from:me -subject:\"Ticket #\" -from:mailer-daemon -from:noreply -from:no-reply -category:promotions -category:social"
+        },
+        "options": {}
+      },
+      "name": "Gmail Trigger — correos entrantes",
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        500
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "RRhqAKrSTV5WDEoW",
+          "name": "Gmail account"
+        }
+      },
+      "id": "a3ccc769-a6c2-5505-ab88-fd8381bac8b5"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "messageId": "={{ $json.id }}",
+        "simple": false,
+        "options": {}
+      },
+      "name": "Obtener contenido completo del correo",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        220,
+        500
+      ],
+      "webhookId": "5d0a7c1e-8f43-4c55-9a51-2f6a0e6c1d01",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "RRhqAKrSTV5WDEoW",
+          "name": "Gmail account"
+        }
+      },
+      "id": "f1fa421e-ab8b-5ebe-8834-fae5e18882d1"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prioridad por reglas: palabras del problema + casos abiertos del cliente.\n// Crítica: riesgo para la persona · Alta: no puede usar el equipo o hay pérdida de datos\n// Media: falla parcial · Baja: consultas y configuraciones.\nconst NOMBRES_PRIORIDAD = { 4: 'Crítica', 3: 'Alta', 2: 'Media', 1: 'Baja' };\nconst HORAS_SLA = { 4: 4, 3: 24, 2: 48, 1: 72 };\nfunction normalizarTexto(s) {\n  return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();\n}\nfunction calcularPrioridad(texto, extra = {}) {\n  const s = normalizarTexto(texto);\n  const reglas = [\n    [4, /(humo|fuego|llama|olor a quemado|quemad[oa]|chispa|bateria (hinchada|inflada)|descarga electrica|corto ?circuito|explot)/],\n    [3, /(no (enciende|prende|arranca|inicia)|pantalla (rota|partida|quebrada|negra)|liquido|derram|mojad[oa]|se (me )?mojo|virus|hacke|ransomware|secuestr|perdi (mis |los |la )?(archivos|informacion|datos)|urgente|no puedo trabajar|se (me )?cayo|golpe)/],\n    [2, /(lent|wifi|internet|\\bred\\b|impresora|no imprime|error|pantallazo|se congela|se reinicia|sonido|audio|teclado|mouse|touchpad|bateria|cargador|no carga|camara|monitor)/],\n  ];\n  let puntaje = 1, motivo = 'Consulta o configuración';\n  for (const [p, re] of reglas) {\n    const m = s.match(re);\n    if (m) { puntaje = p; motivo = `Palabra clave: \"${m[0]}\"`; break; }\n  }\n  if (Number(extra.abiertos || 0) >= 2 && puntaje < 4) { puntaje += 1; motivo += ' + varios casos abiertos'; }\n  if (extra.minimo && extra.minimo > puntaje) { puntaje = extra.minimo; motivo = extra.motivoMinimo || motivo; }\n  return { prioridad: NOMBRES_PRIORIDAD[puntaje], puntaje_prioridad: puntaje, horas_sla: HORAS_SLA[puntaje],\n           motivo_prioridad: motivo.slice(0, 120) };\n}\n\n// Convierte cada correo en una solicitud. Descarta rebotes, respuestas automáticas\n// y respuestas a nuestras propias notificaciones (asunto con \"Ticket #\").\nconst salida = [];\nfor (const item of $input.all()) {\n  const m = item.json;\n  const remitente = m.from?.value?.[0] ?? {};\n  const correo = String(remitente.address ?? '').trim().toLowerCase();\n  if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(correo)) continue;\n  if (/^(mailer-daemon|postmaster|no-?reply)@/.test(correo)) continue;\n  const auto = String(m.headers?.['auto-submitted'] ?? '').toLowerCase();\n  if (auto && !/(^|:\\s*)no\\s*$/.test(auto)) continue;\n  const asunto = String(m.subject ?? '').trim();\n  if (/ticket\\s*#\\s*\\d+/i.test(asunto)) continue;\n  const cuerpo = String(m.text || String(m.html ?? '').replace(/<[^>]*>/g, ' ') || m.snippet || '')\n    .replace(/\\r/g, '').replace(/\\n{3,}/g, '\\n\\n').trim();\n  const descripcion = [asunto, cuerpo].filter(Boolean).join('\\n\\n').slice(0, 5000);\n  if (descripcion.length < 3) continue;\n  salida.push({ json: {\n    message_id: m.id,\n    correo,\n    nombre: String(remitente.name || correo.split('@')[0]).trim().slice(0, 150),\n    descripcion,\n    ...calcularPrioridad(descripcion),\n  } });\n}\nreturn salida;\n"
+      },
+      "name": "Normalizar solicitud recibida por correo",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        500
+      ],
+      "id": "15b00abc-8f45-59fd-b9e8-3586e9b41411"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH t AS (\n  INSERT INTO public.tickets_soporte (usuario_id, nombre_completo, identificacion, correo, tipo_dispositivo,\n                                      descripcion_problema, estado, canal_origen, intentos_ia,\n                                      prioridad, puntaje_prioridad, motivo_prioridad, fecha_limite_atencion)\n  SELECT (SELECT id FROM public.usuarios WHERE lower(correo) = lower($2) LIMIT 1),\n         $1, '', lower($2), 'Sin especificar', $3, 'Pendiente', 'email', 0,\n         $5, $6, $7, now() + make_interval(hours => $8)\n  RETURNING id, nombre_completo, correo, estado, usuario_id, prioridad\n), a AS (\n  INSERT INTO public.auditoria_tickets (ticket_id, actor, accion, estado_nuevo, detalle)\n  SELECT id, 'correo:' || correo, 'ticket_creado', estado,\n         jsonb_build_object('canal', 'email', 'prioridad', prioridad, 'motivo_prioridad', $7::text) FROM t\n)\nSELECT id AS ticket_id, nombre_completo, correo, estado, prioridad, (usuario_id IS NOT NULL) AS tiene_cuenta,\n       $4::text AS message_id\n  FROM t;",
+        "options": {
+          "queryReplacement": "={{ [$json.nombre, $json.correo, $json.descripcion, $json.message_id, $json.prioridad, $json.puntaje_prioridad, $json.motivo_prioridad, $json.horas_sla] }}"
+        }
+      },
+      "name": "Crear ticket desde correo",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        660,
+        500
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "9Gs2DA8EZ8914KDZ",
+          "name": "Postgres account"
+        }
+      },
+      "id": "4f8ebd01-872a-5852-99ee-a0d086e0ba08"
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.correo }}",
+        "subject": "=Solicitud recibida — Ticket #{{ $json.ticket_id }}",
+        "emailType": "html",
+        "message": "=<div style=\"font-family:Arial,sans-serif;font-size:14px;color:#172b4d\">Hola {{ $json.nombre_completo }},<br><br>Recibimos tu correo y registramos una solicitud de soporte técnico.<br><b>Número de ticket:</b> #{{ $json.ticket_id }}<br><br>Para hablar con el asistente y seguir el caso, ingresa a <a href=\"http://localhost:3000\">la plataforma</a> {{ $json.tiene_cuenta ? 'con tu cuenta' : 'y crea una cuenta con este mismo correo' }}; el ticket aparecerá en <b>Mis tickets</b>.<br><br>Equipo de Soporte Técnico</div>",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "name": "Confirmar ticket recibido por correo",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        880,
+        500
+      ],
+      "webhookId": "248a7be7-8979-5639-b16d-39e08ffec66e",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "RRhqAKrSTV5WDEoW",
+          "name": "Gmail account"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "id": "7eba61c2-46d2-56e1-9c35-7ba2e9d23ed7"
+    },
+    {
+      "parameters": {
+        "operation": "markAsRead",
+        "messageId": "={{ $json.message_id }}"
+      },
+      "name": "Marcar correo original como leído",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        880,
+        700
+      ],
+      "webhookId": "5d0a7c1e-8f43-4c55-9a51-2f6a0e6c1d02",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "RRhqAKrSTV5WDEoW",
+          "name": "Gmail account"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "id": "b7b2ab13-2e12-54e7-a37a-2fc7e6e758d2"
+    }
+  ],
+  "connections": {
+    "Webhook recepción": {
+      "main": [
+        [
+          {
+            "node": "Validar y normalizar solicitud",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar y normalizar solicitud": {
+      "main": [
+        [
+          {
+            "node": "Validar sesión del cliente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar sesión del cliente": {
+      "main": [
+        [
+          {
+            "node": "Decidir y priorizar el ticket",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decidir y priorizar el ticket": {
+      "main": [
+        [
+          {
+            "node": "¿Datos y sesión válidos?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Datos y sesión válidos?": {
+      "main": [
+        [
+          {
+            "node": "Crear ticket",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder solicitud rechazada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Crear ticket": {
+      "main": [
+        [
+          {
+            "node": "Responder al portal",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Responder al portal": {
+      "main": [
+        [
+          {
+            "node": "Enviar confirmación al cliente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gmail Trigger — correos entrantes": {
+      "main": [
+        [
+          {
+            "node": "Obtener contenido completo del correo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Obtener contenido completo del correo": {
+      "main": [
+        [
+          {
+            "node": "Normalizar solicitud recibida por correo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalizar solicitud recibida por correo": {
+      "main": [
+        [
+          {
+            "node": "Crear ticket desde correo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Crear ticket desde correo": {
+      "main": [
+        [
+          {
+            "node": "Confirmar ticket recibido por correo",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Marcar correo original como leído",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "id": "stRecepcion01v2a",
+  "tags": []
+}

@@ -1,0 +1,544 @@
+{
+  "name": "05 — Tareas programadas: cierre automático, SLA y resumen gerencial",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 1
+            }
+          ]
+        }
+      },
+      "name": "Cada hora",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        300
+      ],
+      "id": "814f3f63-90f0-5645-ac7b-2c2e64b29826"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Ajusta aquí los tiempos de las tareas automáticas.\nreturn [{ json: {\n  horas_confirmacion: 72,      // cierre automático si el cliente no responde la encuesta\n  dias_inactividad: 7,         // cancela diagnósticos abandonados por el cliente\n  admin_email: 'milenahoyossss@gmail.com',\n  frontend_url: 'http://localhost:3000',\n} }];\n"
+      },
+      "name": "Configuración",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        300
+      ],
+      "id": "cd0227b2-f610-54a4-8248-3106cc93a29c"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH cand AS (\n  SELECT t.id FROM public.tickets_soporte t\n   WHERE t.estado = 'Pendiente de confirmación'\n     AND COALESCE((SELECT max(r.creado_en) FROM public.resultados_visita r WHERE r.ticket_id = t.id), t.actualizado_en)\n         < now() - make_interval(hours => $1)\n   FOR UPDATE SKIP LOCKED\n), upd AS (\n  UPDATE public.tickets_soporte t SET estado = 'Cerrado', fecha_cierre = now()\n    FROM cand WHERE t.id = cand.id\n  RETURNING t.id AS ticket_id, t.nombre_completo, t.correo\n), audit AS (\n  INSERT INTO public.auditoria_tickets (ticket_id, actor, accion, estado_anterior, estado_nuevo, detalle)\n  SELECT ticket_id, 'sistema', 'cierre_automatico', 'Pendiente de confirmación', 'Cerrado',\n         jsonb_build_object('motivo', 'Sin respuesta del cliente en ' || $1 || ' horas') FROM upd\n)\nSELECT upd.*, $1::int AS horas, $2::text AS frontend_url FROM upd;",
+        "options": {
+          "queryReplacement": "={{ [$json.horas_confirmacion, $json.frontend_url] }}"
+        }
+      },
+      "name": "Cerrar casos sin confirmación",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        480,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "9Gs2DA8EZ8914KDZ",
+          "name": "Postgres account"
+        }
+      },
+      "id": "5e014602-d0de-591c-b643-6263716cb370"
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.correo }}",
+        "subject": "=Caso cerrado automáticamente — Ticket #{{ $json.ticket_id }}",
+        "emailType": "html",
+        "message": "=<div style=\"font-family:Arial,sans-serif;font-size:14px;color:#172b4d\">Hola {{ $json.nombre_completo }},<br><br>Como no recibimos respuesta a la encuesta en {{ $json.horas }} horas, cerramos el ticket <b>#{{ $json.ticket_id }}</b> considerando el servicio finalizado.<br>Si el problema continúa, crea una nueva solicitud en <a href=\"{{ $json.frontend_url }}\">la plataforma</a> citando este número.<br><br>Equipo de Soporte Técnico</div>",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "name": "Notificar cierre automático",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        840,
+        0
+      ],
+      "webhookId": "3a9e2a8b-dd05-563a-8650-44344ccf7a28",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "RRhqAKrSTV5WDEoW",
+          "name": "Gmail account"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "id": "f3437aa3-37dc-5fef-8662-a6ef4ed14a0d"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ebfc2727-70b6-5af8-8422-0ce55a2f9145",
+              "leftValue": "={{ !!$json.ticket_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "name": "¿Hubo cierres?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        600,
+        0
+      ],
+      "id": "c03c1f3d-52a6-5297-a2dc-8a4463d032e3"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH cand AS (\n  SELECT t.id, t.estado FROM public.tickets_soporte t\n   WHERE t.estado IN ('Pendiente', 'En diagnóstico', 'Escalamiento pendiente')\n     AND GREATEST(t.actualizado_en, t.fecha_creacion,\n                  COALESCE((SELECT max(h.fecha_mensaje) FROM public.historial_chat h WHERE h.ticket_id = t.id), t.fecha_creacion))\n         < now() - make_interval(days => $1)\n   FOR UPDATE SKIP LOCKED\n), upd AS (\n  UPDATE public.tickets_soporte t SET estado = 'Cancelado', fecha_cierre = now()\n    FROM cand WHERE t.id = cand.id\n  RETURNING t.id AS ticket_id, t.nombre_completo, t.correo\n), audit AS (\n  INSERT INTO public.auditoria_tickets (ticket_id, actor, accion, estado_anterior, estado_nuevo, detalle)\n  SELECT u.ticket_id, 'sistema', 'cierre_por_inactividad', c.estado, 'Cancelado',\n         jsonb_build_object('motivo', 'Sin actividad del cliente en ' || $1 || ' días')\n    FROM upd u JOIN cand c ON c.id = u.ticket_id\n)\nSELECT upd.*, $1::int AS dias, $2::text AS frontend_url FROM upd;",
+        "options": {
+          "queryReplacement": "={{ [$json.dias_inactividad, $json.frontend_url] }}"
+        }
+      },
+      "name": "Cancelar casos inactivos",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        480,
+        200
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "9Gs2DA8EZ8914KDZ",
+          "name": "Postgres account"
+        }
+      },
+      "id": "c01f477d-5559-5451-89cd-1abdef17c712"
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.correo }}",
+        "subject": "=Ticket #{{ $json.ticket_id }} cerrado por inactividad",
+        "emailType": "html",
+        "message": "=<div style=\"font-family:Arial,sans-serif;font-size:14px;color:#172b4d\">Hola {{ $json.nombre_completo }},<br><br>Cerramos el ticket <b>#{{ $json.ticket_id }}</b> porque no tuvo actividad en {{ $json.dias }} días. Si aún necesitas ayuda, crea una nueva solicitud en <a href=\"{{ $json.frontend_url }}\">la plataforma</a>.<br><br>Equipo de Soporte Técnico</div>",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "name": "Notificar cancelación por inactividad",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        840,
+        200
+      ],
+      "webhookId": "356c6dd8-c30e-5112-9227-9f083a556fdf",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "RRhqAKrSTV5WDEoW",
+          "name": "Gmail account"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "id": "6be5d0c0-ad7a-5295-b0fc-fe1bd69a2e5b"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "388900ee-25d3-5fb4-af28-0d565788b976",
+              "leftValue": "={{ !!$json.ticket_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "name": "¿Hubo cancelaciones?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        600,
+        200
+      ],
+      "id": "917c3b47-07f4-5d38-a0ec-98eb6bad38a9"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH v AS (\n  UPDATE public.tickets_soporte t SET sla_notificado = true\n   WHERE t.estado IN ('Pendiente', 'En diagnóstico', 'Escalamiento pendiente', 'Escalado nivel 2', 'Pendiente de asignación')\n     AND t.fecha_limite_atencion < now() AND NOT t.sla_notificado\n  RETURNING t.id, t.prioridad, t.nombre_completo, t.estado, t.fecha_limite_atencion\n)\nSELECT count(*) AS total,\n       string_agg(format('#%s · %s · %s · %s · venció %s', id, prioridad, estado, nombre_completo,\n                         to_char(fecha_limite_atencion AT TIME ZONE 'America/Bogota', 'YYYY-MM-DD HH24:MI')),\n                  '<br>' ORDER BY id) AS lista,\n       $1::text AS admin_email, $2::text AS frontend_url\n  FROM v\nHAVING count(*) > 0;",
+        "options": {
+          "queryReplacement": "={{ [$json.admin_email, $json.frontend_url] }}"
+        }
+      },
+      "name": "Detectar SLA vencidos",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        480,
+        400
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "9Gs2DA8EZ8914KDZ",
+          "name": "Postgres account"
+        }
+      },
+      "id": "b92f11f0-445b-5310-9d74-7645becc7a59"
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.admin_email }}",
+        "subject": "=⚠ {{ $json.total }} ticket(s) superaron el tiempo de atención",
+        "emailType": "html",
+        "message": "=<div style=\"font-family:Arial,sans-serif;font-size:14px;color:#172b4d\">Estos casos superaron su tiempo límite de atención según su prioridad:<br><br>{{ $json.lista }}<br><br>Revísalos en el <a href=\"{{ $json.frontend_url }}/dashboardVentana.html\">Dashboard</a>.<br><br>Equipo de Soporte Técnico</div>",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "name": "Avisar SLA vencidos a administración",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        840,
+        400
+      ],
+      "webhookId": "cca3d5cb-930f-5e3e-9e57-f96828c3b96e",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "RRhqAKrSTV5WDEoW",
+          "name": "Gmail account"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "id": "43f0fef2-35f0-5001-88cc-2cc1e98370c5"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "f7df0789-53c9-5b15-bb2d-330b1c9141f8",
+              "leftValue": "={{ Number($json.total) > 0 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "name": "¿Hay SLA vencidos?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        600,
+        400
+      ],
+      "id": "85fa151f-052e-5c9c-bf1b-c14aed9d9d65"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH s AS (\n  DELETE FROM public.sesiones_usuario\n   WHERE expira_en < now() - interval '7 days' OR revocado_en < now() - interval '7 days'\n  RETURNING 1\n), t AS (\n  DELETE FROM public.tokens_recuperacion WHERE expira_en < now() - interval '1 day' RETURNING 1\n), a AS (\n  DELETE FROM public.auditoria_accesos WHERE creado_en < now() - interval '365 days' RETURNING 1\n)\nSELECT (SELECT count(*) FROM s) AS sesiones, (SELECT count(*) FROM t) AS tokens, (SELECT count(*) FROM a) AS accesos;",
+        "options": {
+          "queryReplacement": "={{ [] }}"
+        }
+      },
+      "name": "Limpiar sesiones y tokens vencidos",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        480,
+        600
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "9Gs2DA8EZ8914KDZ",
+          "name": "Postgres account"
+        }
+      },
+      "id": "ecb74aaa-b851-52da-8458-61b56aa89c99"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 7 * * *"
+            }
+          ]
+        }
+      },
+      "name": "Todos los días 7:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        900
+      ],
+      "id": "d88916e1-3ca8-5605-9686-ab697a23a014"
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { admin_email: 'milenahoyossss@gmail.com', frontend_url: 'http://localhost:3000' } }];\n"
+      },
+      "name": "Configuración del resumen",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        900
+      ],
+      "id": "8cdc1547-fab1-5f48-95c3-3b60deb47b43"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH ayer AS (\n  SELECT ((now() AT TIME ZONE 'America/Bogota')::date - 1) AS dia\n), r AS (\n  SELECT\n    (SELECT count(*) FROM public.tickets_soporte t, ayer\n      WHERE (t.fecha_creacion AT TIME ZONE 'America/Bogota')::date = ayer.dia) AS creados,\n    (SELECT count(*) FROM public.tickets_soporte t, ayer\n      WHERE t.estado IN ('Cerrado', 'Resuelto IA') AND (t.fecha_cierre AT TIME ZONE 'America/Bogota')::date = ayer.dia) AS cerrados,\n    (SELECT count(*) FROM public.tickets_soporte t, ayer\n      WHERE t.estado = 'Resuelto IA' AND (t.fecha_cierre AT TIME ZONE 'America/Bogota')::date = ayer.dia) AS resueltos_ia,\n    (SELECT count(*) FROM public.resultados_visita v, ayer\n      WHERE (v.creado_en AT TIME ZONE 'America/Bogota')::date = ayer.dia) AS visitas,\n    (SELECT round(avg(e.calificacion)::numeric, 2) FROM public.encuestas_satisfaccion e, ayer\n      WHERE (e.creado_en AT TIME ZONE 'America/Bogota')::date = ayer.dia) AS satisfaccion,\n    (SELECT count(*) FROM public.tickets_soporte WHERE estado NOT IN ('Cerrado', 'Cancelado', 'Resuelto IA')) AS abiertos,\n    (SELECT count(*) FROM public.tickets_soporte WHERE estado IN ('Pendiente', 'En diagnóstico', 'Escalamiento pendiente', 'Escalado nivel 2', 'Pendiente de asignación') AND fecha_limite_atencion < now()) AS vencidos,\n    (SELECT string_agg(p || ': ' || n, ' · ' ORDER BY o) FROM (\n       SELECT prioridad AS p, count(*) AS n, max(puntaje_prioridad) * -1 AS o FROM public.tickets_soporte\n        WHERE estado NOT IN ('Cerrado', 'Cancelado', 'Resuelto IA') GROUP BY prioridad) x) AS abiertos_por_prioridad,\n    (SELECT to_char(dia, 'YYYY-MM-DD') FROM ayer) AS dia\n)\nSELECT r.*, $1::text AS admin_email, $2::text AS frontend_url FROM r;",
+        "options": {
+          "queryReplacement": "={{ [$json.admin_email, $json.frontend_url] }}"
+        }
+      },
+      "name": "Calcular resumen del día anterior",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        480,
+        900
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "9Gs2DA8EZ8914KDZ",
+          "name": "Postgres account"
+        }
+      },
+      "id": "020845ee-be4c-5a6f-bed2-feaa54da9ef5"
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.admin_email }}",
+        "subject": "=Resumen de soporte técnico — {{ $json.dia }}",
+        "emailType": "html",
+        "message": "=<div style=\"font-family:Arial,sans-serif;font-size:14px;color:#172b4d\"><b>Resumen del {{ $json.dia }}</b><br><br>Tickets creados: <b>{{ $json.creados }}</b><br>Tickets cerrados: <b>{{ $json.cerrados }}</b> (resueltos por la IA: {{ $json.resueltos_ia }})<br>Visitas técnicas realizadas: <b>{{ $json.visitas }}</b><br>Satisfacción promedio: <b>{{ $json.satisfaccion ?? '—' }}</b> / 5<br><br>Casos abiertos ahora: <b>{{ $json.abiertos }}</b> ({{ $json.abiertos_por_prioridad || 'ninguno' }})<br>Casos con SLA vencido: <b>{{ $json.vencidos }}</b><br><br>Ver indicadores completos en el <a href=\"{{ $json.frontend_url }}/dashboardVentana.html\">Dashboard</a>.<br><br>Equipo de Soporte Técnico</div>",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "name": "Enviar resumen diario a administración",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        720,
+        900
+      ],
+      "webhookId": "e9bdf8a3-97af-5c52-9def-703601037fda",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "RRhqAKrSTV5WDEoW",
+          "name": "Gmail account"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "id": "59034dc4-1a73-5ddf-afa6-00f30bcdc99d"
+    }
+  ],
+  "connections": {
+    "Cada hora": {
+      "main": [
+        [
+          {
+            "node": "Configuración",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Configuración": {
+      "main": [
+        [
+          {
+            "node": "Cerrar casos sin confirmación",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Cancelar casos inactivos",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Detectar SLA vencidos",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Limpiar sesiones y tokens vencidos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cerrar casos sin confirmación": {
+      "main": [
+        [
+          {
+            "node": "¿Hubo cierres?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Hubo cierres?": {
+      "main": [
+        [
+          {
+            "node": "Notificar cierre automático",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cancelar casos inactivos": {
+      "main": [
+        [
+          {
+            "node": "¿Hubo cancelaciones?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Hubo cancelaciones?": {
+      "main": [
+        [
+          {
+            "node": "Notificar cancelación por inactividad",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Detectar SLA vencidos": {
+      "main": [
+        [
+          {
+            "node": "¿Hay SLA vencidos?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Hay SLA vencidos?": {
+      "main": [
+        [
+          {
+            "node": "Avisar SLA vencidos a administración",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Todos los días 7:00": {
+      "main": [
+        [
+          {
+            "node": "Configuración del resumen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Configuración del resumen": {
+      "main": [
+        [
+          {
+            "node": "Calcular resumen del día anterior",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calcular resumen del día anterior": {
+      "main": [
+        [
+          {
+            "node": "Enviar resumen diario a administración",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "id": "stTareas05v1abcd",
+  "tags": []
+}

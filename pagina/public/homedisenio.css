@@ -1,0 +1,345 @@
+/* ==========================================================================
+   Variables Globales y Estética de la Plataforma
+   ========================================================================== */
+:root {
+    --bg-color: var(--color-canvas);
+    --sidebar-bg: var(--color-ink);
+    --card-bg: var(--color-surface);
+    --text-color: var(--color-text);
+    --text-muted: var(--color-muted);
+    --accent-color: var(--color-primary);
+    --accent-hover: var(--color-primary-hover);
+    --support-accent: var(--color-success);
+    --border-color: var(--color-border);
+    --field-bg: var(--color-field);
+    --shadow: var(--shadow-card);
+}
+
+*, *::before, *::after {
+    box-sizing: border-box;
+}
+
+body {
+    min-height: 100vh;
+    margin: 0;
+    padding: 24px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    font-family: var(--font-family);
+}
+
+/* ==========================================================================
+   Layout Principal y Barra de Navegación
+   ========================================================================== */
+.main-layout {
+    display: flex;
+    flex-direction: column;
+    width: min(1240px, 100%);
+    min-height: min(820px, calc(100vh - 48px));
+    overflow: hidden;
+    background: var(--card-bg);
+    border: 1px solid #e5ebf1;
+    border-radius: 40px;
+    box-shadow: var(--shadow);
+}
+
+.sidebar {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    padding: 14px 28px;
+    border-bottom: 1px solid #e4eaf1;
+    background-color: #ffffff;
+    color: var(--text-color);
+}
+
+.sidebar-top {
+    flex: 1;
+    display: flex;
+    justify-content: center; /* Centra el menú horizontalmente en el espacio disponible */
+    align-items: center;
+    min-width: 0;
+}
+
+/* Menú de botones con el indicador flotante */
+.nav-menu {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    margin: 0 auto; /* Asegura el centrado exacto */
+}
+
+/* Indicador flotante ajustado exactamente al botón */
+.nav-indicator {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    background-color: #f2f7fd;
+    border-radius: 8px;
+    border-bottom: 2px solid var(--support-accent, #16834b);
+    box-sizing: border-box;
+    opacity: 0;
+    transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1), 
+                width 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+                opacity 0.2s ease;
+    pointer-events: none;
+    z-index: 1;
+}
+
+/* Estructura del botón de cada pestaña */
+.nav-link {
+    position: relative;
+    z-index: 2;
+    display: inline-flex;
+    align-items: center;       /* Centrado vertical estricto */
+    justify-content: center;  /* Centrado horizontal */
+    gap: 8px;
+    padding: 8px 14px;
+    border-radius: 8px;
+    color: #334e68;
+    font-size: 14px;
+    font-weight: 500;
+    text-decoration: none;
+    white-space: nowrap;
+    line-height: 1.2;          /* Ajuste para equilibrar el texto con la imagen */
+    box-sizing: border-box;
+    transition: color 200ms ease, transform 150ms ease;
+}
+
+/* Centrado estricto y tamaño fijo para los íconos */
+/* Forzar que el ícono quede centrado verticalmente con el texto */
+/* Control estricto de tamaño y alineación del ícono */
+.nav-link .custom-icon {
+    width: 20px !important;
+    height: 20px !important;
+    min-width: 20px !important;
+    min-height: 20px !important;
+    max-width: 20px !important;
+    max-height: 20px !important;
+    object-fit: contain;
+    flex-shrink: 0;
+    display: block;
+    margin: 0;
+    filter: brightness(0) saturate(100%) invert(18%) sepia(19%) saturate(1247%) hue-rotate(169deg) brightness(92%) contrast(91%);
+    opacity: 0.82;
+}
+.nav-link.active {
+    background-color: transparent !important;
+    box-shadow: none !important;
+    color: var(--accent-color, #2563c7);
+}
+
+.nav-link:hover {
+    color: var(--accent-color, #2563c7);
+}
+
+.nav-link:focus-visible {
+    outline: 3px solid rgba(37, 99, 199, 0.3);
+    outline-offset: 2px;
+}
+
+.sidebar-footer {
+    display: flex;
+    flex: 0 0 auto;
+    justify-content: flex-end;
+    padding: 0;
+    margin-left: 8px;
+}
+
+.user-profile {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 9px;
+}
+
+.sidebar .user-avatar-container {
+    display: flex;
+    width: 40px;
+    height: 40px;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #dce7f2;
+    border-radius: 50%;
+    background-color: #edf4fc;
+}
+
+.sidebar .user-avatar-icon {
+    width: 26px;
+    height: 26px;
+    object-fit: contain;
+    filter: brightness(0) saturate(100%) invert(18%) sepia(19%) saturate(1247%) hue-rotate(169deg) brightness(92%) contrast(91%);
+    opacity: 0.82;
+}
+
+.sidebar .user-name {
+    color: #29445f;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+/* ==========================================================================
+   Contenido Principal del Home
+   ========================================================================== */
+.content {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    flex-direction: column;
+    padding: 30px clamp(24px, 5vw, 64px);
+    background: #f7f9fc;
+    overflow-y: auto;
+}
+
+.home-container {
+    max-width: 1100px;
+    margin: 0 auto;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 28px;
+}
+
+.welcome-banner {
+    background: linear-gradient(135deg, #1d61d1 0%, #0d439b 100%);
+    color: #ffffff;
+    padding: 32px 36px;
+    border-radius: 18px;
+    box-shadow: 0 8px 20px rgba(29, 97, 209, 0.15);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 20px;
+}
+
+.welcome-banner h1 {
+    margin: 0 0 8px 0;
+    font-size: 26px;
+    font-weight: 700;
+}
+
+.welcome-banner p {
+    margin: 0;
+    opacity: 0.9;
+    font-size: 15px;
+}
+
+.btn-primary-action {
+    background: #ffffff;
+    color: #1d61d1;
+    border: none;
+    padding: 12px 22px;
+    border-radius: 10px;
+    font-weight: 700;
+    font-size: 14px;
+    cursor: pointer;
+    text-decoration: none;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.btn-primary-action:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.section-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-color);
+    margin-bottom: 16px;
+}
+
+.cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 20px;
+}
+
+.dashboard-card {
+    background: #ffffff;
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+    text-decoration: none;
+    color: inherit;
+}
+
+.dashboard-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.05);
+    border-color: #1d61d1;
+}
+
+.card-icon-wrapper {
+    width: 48px;
+    height: 48px;
+    background: #f0f5ff;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.card-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: #0f172a;
+    margin: 0;
+}
+
+.card-description {
+    font-size: 13px;
+    color: #64748b;
+    margin: 0;
+    line-height: 1.5;
+}
+
+.stats-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 16px;
+}
+
+.stat-box {
+    background: #ffffff;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 18px 22px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.stat-number {
+    font-size: 24px;
+    font-weight: 800;
+    color: #1d61d1;
+}
+
+.stat-label {
+    font-size: 13px;
+    color: #64748b;
+    font-weight: 500;
+}
+
+.nav-link:active, 
+.dashboard-card:active, 
+.btn-primary-action:active {
+    transform: scale(0.96);
+}

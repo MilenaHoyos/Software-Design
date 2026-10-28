@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Base de conocimiento - Plataforma Inteligente de Soporte Técnico</title>
+    <link rel="stylesheet" href="homedisenio.css">
+    <link rel="stylesheet" href="portal.css">
+</head>
+<body>
+    <div class="main-layout">
+        <aside class="sidebar">
+            <div class="sidebar-top">
+                <nav class="nav-menu">
+                    <div class="nav-indicator"></div>
+                    <a href="homeVentana.html" class="nav-link" data-nav="inicio">
+                        <img width="30" height="30" src="Iconos/HomeNegro.png" alt="Inicio" class="custom-icon">
+                        Inicio
+                    </a>
+                    <a href="VenSolicitud.html" class="nav-link" data-nav="soporte">
+                        <img width="30" height="30" src="Iconos/soporte blanco.png" alt="Soporte" class="custom-icon">
+                        Soporte
+                    </a>
+                    <a href="dashboardVentana.html" class="nav-link" data-nav="dashboard">
+                        <img width="30" height="30" src="Iconos/barras.png" alt="Dashboard" class="custom-icon">
+                        Dashboard
+                    </a>
+                    <a href="#" class="nav-link" title="Próximamente">
+                        <img width="30" height="30" src="Iconos/ajustes.png" alt="Ajustes" class="custom-icon">
+                        Ajustes
+                    </a>
+                </nav>
+            </div>
+            <div class="sidebar-footer">
+                <div class="user-profile">
+                    <div class="user-avatar-container">
+                        <img src="Iconos/usuariGris.png" alt="Usuario" class="user-avatar-icon">
+                    </div>
+                    <span class="user-name" id="sidebar-user-name">Usuario</span>
+                </div>
+            </div>
+        </aside>
+
+        <main class="content">
+            <div class="home-container">
+                <section class="welcome-banner">
+                    <div>
+                        <h1>Base de conocimiento</h1>
+                        <p>La IA usa estos artículos para diagnosticar y el cliente los ve como sugerencias al describir su problema.</p>
+                    </div>
+                    <button type="button" class="btn-primary-action" id="btn-nuevo">Nuevo artículo</button>
+                </section>
+                <p id="kb-aviso" class="aviso" hidden></p>
+                <div class="dos-columnas">
+                    <section class="panel">
+                        <div class="barra-filtros">
+                            <h2 style="margin: 0 auto 0 0;">Artículos</h2>
+                            <label>Buscar <input type="search" id="kb-filtro" class="campo" placeholder="Título o categoría"></label>
+                        </div>
+                        <div class="tabla-wrap">
+                            <table class="tabla" id="tabla-kb">
+                                <thead><tr><th>Título</th><th>Categoría</th><th>Estado</th></tr></thead>
+                                <tbody><tr><td colspan="3" class="vacio">Cargando...</td></tr></tbody>
+                            </table>
+                        </div>
+                    </section>
+                    <section class="panel">
+                        <form id="form-kb" class="formulario-columna">
+                            <h2 id="kb-titulo-form">Nuevo artículo</h2>
+                            <label>Título <input type="text" id="kb-titulo" class="campo" minlength="5" maxlength="250" required></label>
+                            <label>Categoría <input type="text" id="kb-categoria" class="campo" maxlength="80" list="kb-categorias" placeholder="Hardware, Red, Software..."></label>
+                            <datalist id="kb-categorias"></datalist>
+                            <label>Contenido (pasos de la solución)
+                                <textarea id="kb-contenido" class="campo" rows="10" minlength="20" maxlength="8000" required></textarea>
+                            </label>
+                            <label style="flex-direction: row; align-items: center; gap: 6px;"><input type="checkbox" id="kb-activo" checked> Activo (visible para la IA y los clientes)</label>
+                            <button type="submit" class="btn">Guardar artículo</button>
+                        </form>
+                    </section>
+                </div>
+            </div>
+        </main>
+    </div>
+    <script src="app.js"></script>
+    <script src="conocimientoApp.js"></script>
+</body>
+</html>

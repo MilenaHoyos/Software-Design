@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trazabilidad - Plataforma Inteligente de Soporte Técnico</title>
+    <link rel="stylesheet" href="homedisenio.css">
+    <link rel="stylesheet" href="portal.css">
+</head>
+<body>
+    <div class="main-layout">
+        <aside class="sidebar">
+            <div class="sidebar-top">
+                <nav class="nav-menu">
+                    <div class="nav-indicator"></div>
+                    <a href="homeVentana.html" class="nav-link" data-nav="inicio">
+                        <img width="30" height="30" src="Iconos/HomeNegro.png" alt="Inicio" class="custom-icon">
+                        Inicio
+                    </a>
+                    <a href="VenSolicitud.html" class="nav-link" data-nav="soporte">
+                        <img width="30" height="30" src="Iconos/soporte blanco.png" alt="Soporte" class="custom-icon">
+                        Soporte
+                    </a>
+                    <a href="dashboardVentana.html" class="nav-link" data-nav="dashboard">
+                        <img width="30" height="30" src="Iconos/barras.png" alt="Dashboard" class="custom-icon">
+                        Dashboard
+                    </a>
+                    <a href="#" class="nav-link" title="Próximamente">
+                        <img width="30" height="30" src="Iconos/ajustes.png" alt="Ajustes" class="custom-icon">
+                        Ajustes
+                    </a>
+                </nav>
+            </div>
+            <div class="sidebar-footer">
+                <div class="user-profile">
+                    <div class="user-avatar-container">
+                        <img src="Iconos/usuariGris.png" alt="Usuario" class="user-avatar-icon">
+                    </div>
+                    <span class="user-name" id="sidebar-user-name">Usuario</span>
+                </div>
+            </div>
+        </aside>
+
+        <main class="content">
+            <div class="home-container">
+                <section class="panel">
+                    <form class="barra-filtros" id="form-buscar">
+                        <h2 style="margin: 0 auto 0 0;">Trazabilidad de casos</h2>
+                        <label>Número de ticket <input type="number" min="1" id="b-ticket" class="campo" placeholder="Ej: 29"></label>
+                        <label>o correo del cliente <input type="email" id="b-correo" class="campo" placeholder="cliente@correo.com"></label>
+                        <button type="submit" class="btn">Buscar</button>
+                    </form>
+                    <p id="traza-aviso" class="aviso" hidden></p>
+                    <div id="traza-tickets"></div>
+                </section>
+
+                <div class="dos-columnas">
+                    <section class="panel">
+                        <h2>Historia completa del caso</h2>
+                        <p class="card-description" id="traza-vacio">Busca un ticket para ver todos sus eventos: cambios de estado, chat, citas, resultados de visita, actas y encuestas.</p>
+                        <div id="traza-eventos"></div>
+                    </section>
+                    <section class="panel">
+                        <h2>Datos del caso</h2>
+                        <div id="traza-ticket"><p class="card-description">—</p></div>
+                        <h3>Accesos recientes del cliente</h3>
+                        <div id="traza-accesos"><p class="card-description">—</p></div>
+                    </section>
+                </div>
+
+                <section class="panel">
+                    <div class="barra-filtros">
+                        <h2 style="margin: 0 auto 0 0;">Auditoría de accesos</h2>
+                        <label>Correo <input type="search" id="a-correo" class="campo" placeholder="Filtrar por correo"></label>
+                        <label>Evento
+                            <select id="a-evento" class="campo">
+                                <option value="">Todos</option>
+                                <option value="login_ok">Inicio de sesión</option>
+                                <option value="login_fallido">Intento fallido</option>
+                                <option value="login_bloqueado">Cuenta bloqueada</option>
+                                <option value="logout">Cierre de sesión</option>
+                                <option value="reset_password">Cambio de contraseña</option>
+                            </select>
+                        </label>
+                    </div>
+                    <div class="tabla-wrap">
+                        <table class="tabla" id="tabla-accesos">
+                            <thead><tr><th>Fecha</th><th>Correo</th><th>Usuario</th><th>Evento</th><th>IP</th></tr></thead>
+                            <tbody><tr><td colspan="5" class="vacio">Cargando...</td></tr></tbody>
+                        </table>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+    <script src="app.js"></script>
+    <script src="trazabilidadApp.js"></script>
+</body>
+</html>

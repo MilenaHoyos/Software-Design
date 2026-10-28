@@ -1,0 +1,196 @@
+:root {
+    --bg-page: var(--color-canvas);
+    --bg-panel: var(--color-surface);
+    --bg-input: var(--color-field);
+    --text-primary: var(--color-text);
+    --text-muted: var(--color-muted);
+    --border-color: var(--color-border);
+    --accent-green: var(--color-success);
+    --accent-blue: var(--color-primary);
+    --accent-blue-hover: var(--color-primary-hover);
+    --font-family: Inter, "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+}
+
+/*centrar textos*/
+body.auth-page-bg {
+    background-color: var(--bg-page);
+    color: var(--text-primary);
+    font-family: var(--font-family);
+    margin: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+}
+
+/* Ampliamos ligeramente el contenedor máximo para que la doble columna respire bien */
+.auth-main-container {
+    width: 100%;
+    max-width: 620px;
+    padding: 20px;
+}
+
+/*crear cuadrado fondo texto*/
+.auth-panel-card {
+    background-color: var(--bg-panel);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
+    transition: all 0.3s ease;
+}
+
+.auth-nav-tabs {
+    display: flex;
+    background-color: #f8fafc;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.nav-tab-btn {
+    flex: 1;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    padding: 16px;
+    font-size: 0.95rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border-bottom: 2px solid transparent;
+}
+
+.nav-tab-btn:hover {
+    color: var(--text-primary);
+}
+
+/*colores barrras botones inciao sesion rerrgistro*/
+.nav-tab-btn.active {
+    color: var(--accent-blue-hover);
+    border-bottom-color: var(--accent-green);
+    background-color: var(--bg-panel);
+    font-weight: 600;
+}
+
+.auth-forms-container {
+    padding: 36px 32px;
+}
+
+.auth-form-content h2 {
+    margin: 0 0 6px 0;
+    font-size: 1.5rem;
+    font-weight: 600;
+}
+
+.auth-form-content .subtitle {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    margin-bottom: 28px;
+}
+
+/* Sistema de dos columnas idéntico a tu referencia */
+.form-row-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+
+.form-input-group {
+    margin-bottom: 18px;
+    display: flex;
+    flex-direction: column;
+}
+
+.form-input-group label {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+}
+
+.form-input-group input {
+    background-color: var(--bg-input);
+    border: 1px solid var(--border-color);
+    border-radius: 24px;
+    padding: 12px 18px;
+    color: var(--text-primary);
+    font-size: 0.95rem;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.form-input-group input:focus {
+    border-color: var(--accent-blue);
+    box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.12);
+}
+
+.form-actions-row {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 20px;
+}
+
+.form-actions-row.center-content {
+    justify-content: center;
+    margin-top: 16px;
+    margin-bottom: 0;
+}
+
+.action-link {
+    color: var(--accent-blue);
+    font-size: 0.88rem;
+    text-decoration: none;
+    font-weight: 500;
+}
+
+.action-link:hover {
+    text-decoration: underline;
+}
+
+.btn-panel-primary {
+    width: 100%;
+    background-color: var(--accent-blue);
+    color: #ffffff;
+    border: none;
+    padding: 12px;
+    border-radius: 24px;
+    font-weight: 600;
+    font-size: 0.95rem;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
+}
+
+.btn-panel-primary:hover {
+    background-color: var(--accent-blue-hover);
+}
+
+/* Animaciones fluidas conservadas */
+@keyframes formFadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes formFadeInReverse {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.hidden-form {
+    display: none;
+}
+
+.active-form {
+    display: block;
+    animation: formFadeIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.active-form.reverse {
+    animation: formFadeInReverse 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.auth-nav-tabs.hidden-tabs {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-8px);
+    display: none;
+}

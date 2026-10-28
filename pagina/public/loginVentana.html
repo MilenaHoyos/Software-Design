@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Soporte Técnico - Acceso</title>
+    <link rel="stylesheet" href="loginDisenio.css">
+    <link rel="stylesheet" href="portal.css">
+</head>
+<body class="auth-page-bg">
+
+    <div class="auth-main-container">
+        <section class="auth-hero">
+            <span class="eyebrow"><img src="img/iconos/brand-repair.svg" alt=""> Tu aliado tecnológico</span>
+            <h1>Soporte técnico <span class="resaltado">inteligente</span> para tus equipos</h1>
+            <p class="hero-description">Reparamos, acompañamos y mantenemos tus equipos funcionando con atención cercana y experta.</p>
+            <div class="auth-benefits">
+                <article class="auth-benefit">
+                    <img src="img/iconos/soporte-lineal.svg" alt="">
+                    <span><strong>Diagnóstico con IA 24/7</strong><small>Orientación inmediata, en cualquier momento.</small></span>
+                </article>
+                <article class="auth-benefit">
+                    <img src="img/iconos/tickets-lineal.svg" alt="">
+                    <span><strong>Técnicos en tu zona</strong><small>Expertos listos para ayudarte cerca de ti.</small></span>
+                </article>
+                <article class="auth-benefit">
+                    <img src="img/iconos/ajustes-lineal.svg" alt="">
+                    <span><strong>Seguimiento en tiempo real</strong><small>Conoce cada avance de tu solicitud.</small></span>
+                </article>
+            </div>
+            <span class="hero-badge">● Atención inteligente, siempre disponible</span>
+        </section>
+        <div class="auth-panel-card">
+            <p id="auth-aviso" class="aviso" hidden></p>
+
+            <!-- Selector de pestañas limpio -->
+            <div class="auth-nav-tabs" id="authTabs">
+                <button type="button" class="nav-tab-btn active" data-vista="login">Iniciar Sesión</button>
+                <button type="button" class="nav-tab-btn" data-vista="register">Registrarse</button>
+            </div>
+
+            <div class="auth-forms-container">
+
+                <!-- FORMULARIO 1: LOGIN -->
+                <form id="form-login" class="auth-form-content active-form">
+                    <h2>Iniciar Sesión</h2>
+                    <p class="subtitle">Ingresa a tu cuenta para gestionar tus solicitudes.</p>
+
+                    <div class="form-input-group">
+                        <label for="login-email">Correo Electrónico</label>
+                        <input type="email" id="login-email" placeholder="ejemplo@correo.com" required>
+                    </div>
+
+                    <div class="form-input-group">
+                        <label for="login-password">Contraseña</label>
+                        <input type="password" id="login-password" placeholder="••••••••" required>
+                    </div>
+
+                    <div class="form-actions-row">
+                        <a href="#" class="action-link" data-vista="forgot">¿Olvidaste tu contraseña?</a>
+                    </div>
+
+                    <button type="submit" class="btn-panel-primary">Ingresar</button>
+                </form>
+
+                <!-- FORMULARIO 2: REGISTRO -->
+                <form id="form-register" class="auth-form-content hidden-form">
+                    <h2>Crear Cuenta</h2>
+                    <p class="subtitle">Regístrate para comenzar a usar el soporte.</p>
+
+                    <!--Fila 1 nombre e identificacion-->
+                    <div class="form-row-grid">
+
+                    <div class="form-input-group">
+                        <label for="reg-name">Nombre Completo</label>
+                        <input type="text" id="reg-name" placeholder="Nombre" required>
+                    </div>
+                    <div class="form-input-group">
+                        <label for="reg-cedula">Cédula / Documento de Identidad</label>
+                        <input type="text" id="reg-cedula" placeholder="1012345678" required>
+                    </div>
+                    </div>
+                    <!--Fila 2 corre y telefonos-->
+                    <div class="form-row-grid">
+
+                    <div class="form-input-group">
+                        <label for="reg-phone">Teléfono </label>
+                        <input type="tel" id="reg-phone" placeholder="3001234567" required>
+                    </div>
+
+                    <div class="form-input-group">
+                        <label for="reg-email">Correo Electrónico</label>
+                        <input type="email" id="reg-email" placeholder="ejemplo@correo.com" required>
+                    </div>
+                    </div>
+
+                    <!---Fila 3 contrasenia a ancho completo-->
+
+                    <div class="form-input-group">
+                        <label for="reg-password">Contraseña</label>
+                        <input type="password" id="reg-password" placeholder="Mínimo 10 caracteres" minlength="10" required>
+                    </div>
+
+                    <button type="submit" class="btn-panel-primary">Registrarse</button>
+                </form>
+
+                <!-- FORMULARIO 3: OLVIDÉ MI CONTRASEÑA -->
+                <form id="form-forgot" class="auth-form-content hidden-form">
+                    <h2>Recuperar Contraseña</h2>
+                    <p class="subtitle">Ingresa tu correo electrónico y te enviaremos las instrucciones.</p>
+
+                    <div class="form-input-group">
+                        <label for="forgot-email">Correo Electrónico</label>
+                        <input type="email" id="forgot-email" placeholder="ejemplo@correo.com" required>
+                    </div>
+
+                    <button type="submit" class="btn-panel-primary">Enviar instrucciones</button>
+
+                    <div class="form-actions-row center-content">
+                        <a href="#" class="action-link" data-vista="login" data-direccion="reverse">Volver al Inicio de Sesión</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+    <script src="loginApp.js"></script>
+</body>
+</html>

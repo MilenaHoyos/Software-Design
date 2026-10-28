@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Plataforma inteligente para gestion de soporte tecnico</title>
+    <link rel="stylesheet" href="SolicitudDisenio.css">
+    <link rel="stylesheet" href="portal.css">
+</head>
+<body class="support-request-page">
+    <div class="main-layout"> <!--pantalla completa-->
+        <!-- Barra Lateral de Navegación -->
+        <aside class="sidebar">
+            <div class="sidebar-top">
+                <nav class="nav-menu">
+                    <div class="nav-indicator"></div>
+                    <a href="homeVentana.html" class="nav-link" data-nav="inicio">
+                        <img width="30" height="30" src="Iconos/HomeNegro.png" alt="Inicio" class="custom-icon">
+                        Inicio
+                    </a>
+                    <a href="VenSolicitud.html" class="nav-link active" data-nav="soporte">
+                        <img width="30" height="30" src="Iconos/soporte blanco.png" alt="Soporte" class="custom-icon">
+                        Soporte
+                    </a>
+                    <a href="misTickets.html" class="nav-link" data-nav="dashboard">
+                        <img width="30" height="30" src="Iconos/barras.png" alt="Dashboard" class="custom-icon">
+                        Dashboard
+                    </a>
+                    <a href="#" class="nav-link" title="Próximamente">
+                        <img width="30" height="30" src="Iconos/ajustes.png" alt="Ajustes" class="custom-icon">
+                        Ajustes
+                    </a>
+                </nav>
+            </div>
+            
+            <!-- Perfil de usuario en la parte inferior de la barra lateral -->
+            <div class="sidebar-footer">
+                <div class="user-profile">
+                    <div class="user-avatar-container">
+                        <img src="Iconos/usuariGris.png" alt="Usuario" class="user-avatar-icon">
+                    </div>
+                    <span class="user-name" id="sidebar-user-name">Usuario</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Contenido Principal -->
+        <main class="content">
+            <header class="content-header">
+                <span class="eyebrow">⚙ Soporte técnico</span>
+                <h1>Solicita tu <span class="resaltado">servicio</span></h1>
+                <p>Cuéntanos qué le sucede a tu equipo y encontraremos la mejor solución.</p>
+            </header>
+
+            <!-- Contenido del formulario -->
+            <div class="form-card-wrapper">
+                <div class="form-card">
+                    <p id="solicitud-aviso" class="aviso" hidden></p>
+                    <form id="soporte-form">
+                        <!-- Campos de texto con placeholder -->
+                        <div class="form-group">
+                            <input type="text" id="nombre" name="nombre" placeholder="Nombre completo:" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <input type="text" id="identificacion" name="identificacion" placeholder="Identificación:" required>
+                        </div>
+
+                        <div class="form-group">
+                            <input type="email" id="correo" name="correo" placeholder="Correo electrónico:" readonly title="Se usa el correo de tu cuenta">
+                        </div>
+
+                        <div class="form-group">
+                            <input type="text" id="telefono" name="telefono" placeholder="Teléfono:">
+                        </div>
+
+                        <div class="form-group">
+                            <input type="text" id="tipo_dispositivo" name="tipo_dispositivo" placeholder="Tipo de dispositivo:">
+                        </div>
+
+                        <!-- Área de texto grande -->
+                        <div class="form-group full-width">
+                            <textarea id="descripcion" name="descripcion" rows="5" placeholder="Descripción libre del problema:" minlength="10" required></textarea>
+                            <div id="sugerencias" class="sugerencias" hidden aria-live="polite"></div>
+                        </div>
+
+                        <!-- Botón de acción -->
+                        <div class="form-actions">
+                            <button type="button" class="btn-secondary" disabled title="Próximamente">Subir archivos</button>
+                            <a href="#" class="privacy-link">Políticas de privacidad</a>
+                            <button type="submit" class="btn-primary">Enviar reporte</button>
+                        </div>
+                    </form>      
+                </div>
+            </div>
+        </main>
+    </div>
+    <script src="app.js"></script>
+    <script src="SolicitudApp.js"></script>
+</body>
+</html>

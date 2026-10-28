@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Plataforma Inteligente de Soporte Técnico</title>
+    <link rel="stylesheet" href="homedisenio.css">
+    <link rel="stylesheet" href="portal.css">
+</head>
+<body>
+    <div class="main-layout">
+        <aside class="sidebar">
+            <div class="sidebar-top">
+                <nav class="nav-menu">
+                    <div class="nav-indicator"></div>
+                    <a href="dashboardVentana.html" class="nav-link" data-nav="inicio">
+                        <img width="30" height="30" src="Iconos/HomeNegro.png" alt="Inicio" class="custom-icon">
+                        Inicio
+                    </a>
+                    <a href="VenSolicitud.html" class="nav-link" data-nav="soporte">
+                        <img width="30" height="30" src="Iconos/soporte blanco.png" alt="Soporte" class="custom-icon">
+                        Soporte
+                    </a>
+                    <a href="dashboardVentana.html" class="nav-link active" data-nav="dashboard">
+                        <img width="30" height="30" src="Iconos/barras.png" alt="Dashboard" class="custom-icon">
+                        Dashboard
+                    </a>
+                    <a href="#" class="nav-link" title="Próximamente">
+                        <img width="30" height="30" src="Iconos/ajustes.png" alt="Ajustes" class="custom-icon">
+                        Ajustes
+                    </a>
+                </nav>
+            </div>
+            <div class="sidebar-footer">
+                <div class="user-profile">
+                    <div class="user-avatar-container">
+                        <img src="Iconos/usuariGris.png" alt="Usuario" class="user-avatar-icon">
+                    </div>
+                    <span class="user-name" id="sidebar-user-name">Usuario</span>
+                </div>
+            </div>
+        </aside>
+
+        <main class="content">
+            <div class="home-container">
+                <section class="panel" id="panel-monitoreo">
+                    <div class="barra-filtros">
+                        <h2 style="margin: 0 auto 0 0;">Monitoreo operativo <span class="en-vivo">● en vivo</span></h2>
+                        <span class="card-description" id="mon-fecha"></span>
+                        <button type="button" class="btn btn-secundario" id="btn-mon-actualizar">Actualizar</button>
+                    </div>
+                    <div class="stats-container metricas" id="mon-tarjetas"></div>
+                    <div class="dos-columnas" style="margin-top: 14px;">
+                        <div>
+                            <h3>Atención inmediata (SLA vencido o por vencer en 2 h)</h3>
+                            <div class="tabla-wrap">
+                                <table class="tabla" id="tabla-mon-urgentes">
+                                    <thead><tr><th>#</th><th>Cliente</th><th>Prioridad</th><th>Estado</th><th>Límite</th></tr></thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
+                            <h3 style="margin-top: 16px;">Actividad reciente</h3>
+                            <ul class="historial" id="mon-actividad"></ul>
+                        </div>
+                        <div>
+                            <h3>Técnicos hoy</h3>
+                            <div class="tabla-wrap">
+                                <table class="tabla" id="tabla-mon-tecnicos">
+                                    <thead><tr><th>Técnico</th><th>Zona</th><th>Hoy</th><th>Visitas</th><th>Próxima</th></tr></thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="panel">
+                    <div class="barra-filtros">
+                        <h2 style="margin: 0 auto 0 0;">Indicadores gerenciales</h2>
+                        <label>Desde <input type="date" id="f-desde" class="campo"></label>
+                        <label>Hasta <input type="date" id="f-hasta" class="campo"></label>
+                        <button type="button" class="btn" id="btn-filtrar">Aplicar</button>
+                    </div>
+                    <div class="stats-container metricas" id="metricas"></div>
+                    <p class="card-description" id="metricas-fecha"></p>
+
+                    <div class="graficos">
+                        <div class="grafico panel" style="grid-column: 1 / -1;">
+                            <h3>Tickets creados y cerrados por día</h3>
+                            <p class="sub">Cerrados incluye los resueltos por la IA y los cerrados tras la visita.</p>
+                            <ul class="leyenda">
+                                <li><i style="background: var(--serie-1)"></i>Creados</li>
+                                <li><i style="background: var(--serie-2)"></i>Cerrados</li>
+                            </ul>
+                            <div id="grafico-tendencia"></div>
+                            <details class="tabla-datos"><summary>Ver datos en tabla</summary><div id="tabla-tendencia"></div></details>
+                        </div>
+                        <div class="grafico panel"><h3>Tickets por prioridad</h3><p class="sub">Creados en el periodo</p><div id="grafico-prioridad" class="barras"></div></div>
+                        <div class="grafico panel"><h3>Tickets por estado</h3><p class="sub">Estado actual de los creados en el periodo</p><div id="grafico-estado" class="barras"></div></div>
+                        <div class="grafico panel"><h3>Tickets por categoría</h3><p class="sub">Clasificación al escalar</p><div id="grafico-categoria" class="barras"></div></div>
+                        <div class="grafico panel"><h3>Visitas por zona</h3><p class="sub">Citas de los tickets del periodo</p><div id="grafico-zona" class="barras"></div></div>
+                        <div class="grafico panel" style="grid-column: 1 / -1;">
+                            <h3>Desempeño de técnicos</h3>
+                            <div class="tabla-wrap">
+                                <table class="tabla" id="tabla-tecnicos">
+                                    <thead><tr><th>Técnico</th><th>Zona</th><th>Visitas</th><th>Resueltas</th><th>Satisfacción</th><th>Próximas</th></tr></thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <p id="dash-aviso" class="aviso" hidden></p>
+
+                <div class="dos-columnas">
+                    <section class="panel">
+                        <div class="barra-filtros">
+                            <h2 style="margin: 0 auto 0 0;">Tickets</h2>
+                            <button type="button" class="btn btn-secundario" id="btn-csv">Exportar CSV</button>
+                        </div>
+                        <div class="barra-filtros">
+                            <label>Buscar <input type="search" id="f-texto" class="campo" placeholder="# ticket, nombre o correo"></label>
+                            <label>Estado
+                                <select id="f-estado" class="campo">
+                                    <option value="">Todos</option>
+                                    <option>Pendiente de asignación</option>
+                                    <option>Escalado nivel 2</option>
+                                    <option>Escalamiento pendiente</option>
+                                    <option>Agendado</option>
+                                    <option>En atención</option>
+                                    <option>Pendiente de confirmación</option>
+                                    <option>En diagnóstico</option>
+                                    <option>Pendiente</option>
+                                    <option>Resuelto IA</option>
+                                    <option>Cerrado</option>
+                                    <option>Cancelado</option>
+                                </select>
+                            </label>
+                            <label>Prioridad
+                                <select id="f-prioridad" class="campo">
+                                    <option value="">Todas</option>
+                                    <option>Crítica</option><option>Alta</option><option>Media</option><option>Baja</option>
+                                </select>
+                            </label>
+                            <label>Creado desde <input type="date" id="f-creado-desde" class="campo"></label>
+                            <label>Creado hasta <input type="date" id="f-creado-hasta" class="campo"></label>
+                            <label style="flex-direction: row; align-items: center; gap: 6px;"><input type="checkbox" id="f-vencidos"> Solo SLA vencido</label>
+                        </div>
+                        <div class="tabla-wrap">
+                            <table class="tabla" id="tabla-tickets-admin">
+                                <thead>
+                                    <tr><th>#</th><th>Cliente</th><th>Problema</th><th>Prioridad</th><th>Estado</th><th>Atender antes de</th><th>Técnico</th></tr>
+                                </thead>
+                                <tbody id="tabla-admin">
+                                    <tr><td colspan="7" class="vacio">Cargando...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="paginacion">
+                            <span id="pag-info"></span>
+                            <button type="button" class="btn btn-secundario" id="pag-anterior">◀</button>
+                            <button type="button" class="btn btn-secundario" id="pag-siguiente">▶</button>
+                        </div>
+                    </section>
+
+                    <section class="panel">
+                        <h2>Detalle</h2>
+                        <p class="card-description" id="detalle-vacio">Selecciona un ticket.</p>
+                        <div id="detalle-contenido" hidden></div>
+
+                        <form id="form-asignar" class="formulario-columna" hidden>
+                            <h3>Asignar técnico y agendar visita</h3>
+                            <label>Técnico
+                                <select id="asig-tecnico" class="campo" required></select>
+                            </label>
+                            <label>Horario libre (hora Colombia)
+                                <select id="asig-horario" class="campo" required></select>
+                            </label>
+                            <button type="submit" class="btn" id="btn-asignar">Asignar</button>
+                        </form>
+                    </section>
+                </div>
+
+                <section class="panel">
+                    <div class="agenda-barra">
+                        <strong id="agenda-titulo">Agenda técnica</strong>
+                        <select id="agenda-tecnico" class="campo"><option value="0">Todos los técnicos</option></select>
+                        <button type="button" class="btn btn-secundario" id="agenda-anterior">◀ Anterior</button>
+                        <button type="button" class="btn btn-secundario" id="agenda-hoy">Esta semana</button>
+                        <button type="button" class="btn btn-secundario" id="agenda-siguiente">Siguiente ▶</button>
+                    </div>
+                    <div id="agenda" class="agenda-semana"></div>
+                </section>
+            </div>
+        </main>
+    </div>
+    <script src="app.js"></script>
+    <script src="agenda.js"></script>
+    <script src="graficos.js"></script>
+    <script src="dashboardApp.js"></script>
+</body>
+</html>

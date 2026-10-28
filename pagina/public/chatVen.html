@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Plataforma inteligente para gestión de soporte técnico</title>
+    <!-- Conexión con tu archivo de estilos CSS -->
+    <link rel="stylesheet" href="ChatDisenio.css">
+    <link rel="stylesheet" href="portal.css">
+</head>
+<body>
+    <div class="main-layout"> <!-- Pantalla completa -->
+        <!-- Barra Lateral de Navegación -->
+        <aside class="sidebar">
+            <div class="sidebar-top">
+                <nav class="nav-menu">
+                    <div class="nav-indicator"></div>
+                    <a href="homeVentana.html" class="nav-link" data-nav="inicio">
+                        <img width="30" height="30" src="Iconos/HomeNegro.png" alt="Inicio" class="custom-icon">
+                        Inicio
+                    </a>
+                    <a href="VenSolicitud.html" class="nav-link active" data-nav="soporte">
+                        <img width="30" height="30" src="Iconos/soporte blanco.png" alt="Soporte" class="custom-icon">
+                        Soporte
+                    </a>
+                    <a href="misTickets.html" class="nav-link" data-nav="dashboard">
+                        <img width="30" height="30" src="Iconos/barras.png" alt="Dashboard" class="custom-icon">
+                        Dashboard
+                    </a>
+                    <a href="#" class="nav-link" title="Próximamente">
+                        <img width="30" height="30" src="Iconos/ajustes.png" alt="Ajustes" class="custom-icon">
+                        Ajustes
+                    </a>
+                </nav>
+            </div>
+            
+            <!-- Perfil de usuario en la parte inferior de la barra lateral -->
+            <div class="sidebar-footer">
+                <div class="user-profile">
+                    <div class="user-avatar-container">
+                        <img src="Iconos/usuariGris.png" alt="Usuario" class="user-avatar-icon">
+                    </div>
+                    <span class="user-name" id="sidebar-user-name">Usuario</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Contenido Principal / Interfaz de Chat Funcional -->
+        <main class="content">
+            <div class="chat-container" id="chat-container-wrapper">
+                <!-- Ticket en curso -->
+                <div class="chat-ticket-info" id="chat-ticket-info" hidden>
+                    <span>Ticket <strong id="chat-ticket-num"></strong></span>
+                    <span id="chat-ticket-estado"></span>
+                    <span id="chat-ticket-prioridad"></span>
+                    <span id="chat-intentos"></span>
+                    <button type="button" class="enlace-tecnico" id="btn-pedir-tecnico">Prefiero hablar con un técnico</button>
+                </div>
+
+                <!-- Vista de Bienvenida Centrada (Visible al entrar) -->
+                <div class="welcome-screen" id="welcome-screen">
+                    <h2>✨ ¿En qué puedo ayudarte hoy?</h2>
+                    <p id="welcome-texto">Cargando tu caso...</p>
+                </div>
+
+                <!-- Contenedor donde se cargarán dinámicamente los mensajes -->
+                <div class="chat-messages" id="chat-messages" style="display: none;"></div>
+
+                <!-- Barra de entrada de chat interactiva -->
+                <div class="chat-input-container">
+                    <div class="chat-input-area">
+                        <input type="text" id="chat-input" placeholder="Escribe tu respuesta o describe el problema...." autocomplete="off">
+                        <button type="button" id="send-btn" class="send-icon-btn">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Encuesta de satisfacción cuando la IA resuelve el caso -->
+            <div id="encuesta-chat" hidden style="max-width: 680px; width: 100%; margin: 20px auto 0 auto;"></div>
+
+            <!-- Formulario de Escalamiento Humano -->
+            <div id="escalation-form-container" style="display: none; max-width: 680px; width: 100%; margin: 20px auto 0 auto; padding: 20px; background: #ffffff; border-radius: 14px; border: 1px solid var(--border-color); box-shadow: var(--shadow);">
+                <h3 style="margin-top: 0; color: var(--text-color);">⚠️ Escalar caso a Soporte Humano</h3>
+                <p style="font-size: 14px; color: var(--text-muted);">Indícanos dónde y cómo contactarte para asignarte un técnico. Si el caso requiere visita, buscaremos el primer horario disponible en tu zona.</p>
+                
+                <form id="human-escalation-form">
+                    <p id="esc-aviso" class="aviso" hidden></p>
+                    <div style="margin-bottom: 16px;">
+                        <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; color: var(--text-color);">Teléfono de contacto (Opcional):</label>
+                        <input type="tel" id="esc-phone" style="width: 100%; padding: 10px; border: 1px solid var(--border-color); border-radius: 6px; font: inherit; background: var(--field-bg);">
+                    </div>
+                    <div style="margin-bottom: 12px;">
+                        <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; color: var(--text-color);">Dirección exacta de visita:</label>
+                        <input type="text" id="esc-direccion" required placeholder="Ej: Calle 100 # 15-20" style="width: 100%; padding: 10px; border: 1px solid var(--border-color); border-radius: 6px; font: inherit; background: var(--field-bg);">
+                    </div>
+                    <div style="margin-bottom: 16px;">
+                        <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; color: var(--text-color);">Cuadrante (Zona de Bogotá):</label>
+                        <select id="esc-cuadrante" style="width: 100%; padding: 10px; border: 1px solid var(--border-color); border-radius: 6px; font: inherit; background: var(--field-bg);">
+                            <option value="">No sé / deducir de la dirección</option>
+                            <option value="Norte">Norte</option>
+                            <option value="Sur">Sur</option>
+                            <option value="Oriente">Oriente</option>
+                            <option value="Occidente">Occidente</option>
+                        </select>
+                    </div>
+                    <button type="submit" id="esc-enviar" style="width: 100%; padding: 12px; background: var(--accent-color); color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; transition: background 160ms ease;">Enviar a Soporte Humano</button>
+                </form>
+            </div>
+        </main>
+    </div>
+    <script src="app.js"></script>
+    <script src="ChatApp.js"></script>
+</body>
+</html>
